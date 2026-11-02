@@ -1,0 +1,100 @@
+// Testes isolados das partes puras: registro de agentes, segurança e parsers.
+// Não falam com nenhum serviço: são mocks por natureza, e só isso.
+
+import { describe, expect, test } from 'claude-code/testing'
+import { parseChatCompletion, parseEnvelope } from '../src/connectors/parse'
+import { findAgent, mergeAgents, parseAgentFile, validateAgent, defaultLayer } from '../src/registry/registry'
+import { checkDestination, cleanOutput, redactSecrets } from '../src/security/sanitize'
+
+// Valores FALSOS, montados por partes para nenhum scanner de segredos os
+// confundir com chaves reais. Têm o formato que o MOD precisa remover.
+const FALSO = {
+  sk: ['sk', 'abcdefghijklmnopqrstuvwxyz123456'].join('-'),
+  openrouter: ['sk', 'or', 'v1', 'abcdefghijklmnopqrstuvwxyz0123'].join('-'),
+  github: ['gh', 'p_', 'a'.repeat(36)].join(''),
+}
+
+describe('registro de agentes', () => {
+  test('os padrões trazem Claude, GarraIA e Hermes', async () => {
+    const agents = mergeAgents([defaultLayer()])
+    expect(agents.map(a => a.id)).toEqual(['claude', 'garraia', 'hermes'])
+    expect(findAgent(agents, 'Garra')?.id).toBe('garraia')
+    expect(findAgent(agents, 'hermes')?.nome).toBe('Hermes')
+  })
+
+  test('aceita um agente novo por processo local', async () => {
+    const v = validateAgent({ id: 'ollama-local', nome: 'Ollama', consulta: [{ type: 'process', argv: ['ollama', 'run', 'qwen3'], output: 'text' }] })
+    expect(v.ok).toBe(true)
+    if (v.ok) {
+      expect(v.agent.permissoes).toEqual({ consulta: true, delegar: false })
+      expect(v.agent.sessao.compartilharHistorico).toBe(false)
+    }
+  })
+
+  test('recusa id reservado, mensagem na linha de comando, http remoto e segredo embutido', async () => {
+    expect(validateAgent({ id: 'claude', nome: 'X', consulta: [{ type: 'process', argv: ['x'] }] }).ok).toBe(false)
+    const argv = validateAgent({ id: 'a', nome: 'A', consulta: [{ type: 'process', argv: ['cli', '{mensagem}'] }] })
+    expect(argv.ok).toBe(false)
+    const remote = validateAgent({ id: 'b', nome: 'B', consulta: [{ type: 'openai-http', baseUrl: 'http://exemplo.com', model: 'm' }] })
+    expect(remote.ok).toBe(false)
+    const secret = validateAgent({ id: 'c', nome: 'C', consulta: [{ type: 'process', argv: ['cli', `--api-key=${FALSO.sk}`] }] })
+    expect(secret.ok).toBe(false)
+    const acp = validateAgent({ id: 'd', nome: 'D', consulta: [{ type: 'acp', argv: ['hermes', 'acp'] }] })
+    expect(acp.ok).toBe(false)
+  })
+
+  test('arquivo do usuário substitui o padrão pelo id e não substitui o Claude', async () => {
+    const file = parseAgentFile(JSON.stringify({ agentes: [{ id: 'hermes', nome: 'Hermes HTTP', consulta: [{ type: 'openai-http', baseUrl: 'http://127.0.0.1:8642', model: 'hermes-agent' }] }, { id: 'x', nome: 1 }] }))
+    expect(file.agents.length).toBe(1)
+    expect(file.erros.length).toBe(1)
+    const merged = mergeAgents([defaultLayer(), { origem: 'usuário (arquivo)', agents: file.agents }])
+    const hermes = findAgent(merged, 'hermes')
+    expect(hermes?.nome).toBe('Hermes HTTP')
+    expect(hermes?.origem).toBe('usuário (arquivo)')
+    expect(findAgent(merged, 'claude')?.origem).toBe('padrão')
+  })
+})
+
+describe('segurança', () => {
+  test('remove segredos antes do envio', async () => {
+    const { text, count } = redactSecrets(`chave ${FALSO.openrouter} e token=meuSegredoMuitoLongo e ${FALSO.github}`)
+    expect(count).toBe(3)
+    expect(text).not.toContain('abcdefghijklmnop')
+    expect(text).not.toContain('meuSegredoMuitoLongo')
+    expect(text).not.toContain(FALSO.github)
+    expect(text).toContain('token=[SEGREDO REMOVIDO]')
+  })
+
+  test('limpa sequências de escape e caracteres invisíveis da resposta', async () => {
+    expect(cleanOutput('\u001b[31mvermelho\u001b[0m​ ok')).toBe('vermelho ok')
+    expect(cleanOutput('a'.repeat(10), 4)).toContain('cortada')
+  })
+
+  test('destinos HTTP: loopback livre, remoto só com https e permissão', async () => {
+    expect(checkDestination('http://127.0.0.1:8642', false)).toBeNull()
+    expect(checkDestination('http://localhost:3888', false)).toBeNull()
+    expect(checkDestination('https://api.exemplo.com', false)).not.toBeNull()
+    expect(checkDestination('http://api.exemplo.com', true)).not.toBeNull()
+    expect(checkDestination('https://api.exemplo.com', true)).toBeNull()
+    expect(checkDestination('http://user:pw@127.0.0.1', false)).not.toBeNull()
+  })
+})
+
+describe('parsers', () => {
+  test('envelope garra.ask.v1 e erro', async () => {
+    const ok = parseEnvelope('{"schema":"garra.ask.v1","ok":true,"answer":"PRONTO","model":"m"}\n', 'garra.ask.v1')
+    expect(ok).toEqual({ ok: true, text: 'PRONTO', modelo: 'm' })
+    const bad = parseEnvelope('{"schema":"garra.ask.v1","ok":false,"error":{"message":"sem chave"}}', 'garra.ask.v1')
+    expect(bad).toEqual({ ok: false, motivo: 'sem chave' })
+  })
+
+  test('envelope garra.agent.v1 resume as ferramentas usadas', async () => {
+    const r = parseEnvelope('{"schema":"garra.agent.v1","ok":true,"answer":"feito","tool_calls":[{"name":"bash"},{"name":"file_read"}]}', 'garra.agent.v1')
+    expect(r.ok && r.extra).toContain('bash, file_read')
+  })
+
+  test('chat completions OpenAI', async () => {
+    expect(parseChatCompletion('{"model":"x","choices":[{"message":{"content":"oi"}}]}')).toEqual({ ok: true, text: 'oi', modelo: 'x' })
+    expect(parseChatCompletion('{"error":{"message":"401"}}').ok).toBe(false)
+  })
+})

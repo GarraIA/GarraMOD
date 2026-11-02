@@ -1,0 +1,26 @@
+{
+  "name": "garra-mod",
+  "version": "0.1.0",
+  "description": "GarraIA Claude Code: identidade brasileira (pt-BR), tema Garra Brasil, painel /garra e uma ponte multiagente real com GarraIA e Hermes.",
+  "author": { "name": "GarraIA Contributors", "url": "https://github.com/michelbr84/GarraRUST" },
+  "homepage": "https://github.com/michelbr84/GarraRUST",
+  "license": "MIT",
+  "keywords": ["garraia", "pt-BR", "brasil", "multiagente", "hermes", "function-hooks", "claude-mods"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "garraiaApiKey": {
+      "type": "string",
+      "title": "Chave do gateway GarraIA (opcional)",
+      "description": "Usada só pelo transporte HTTP do GarraIA (/v1/chat/completions). Guardada no armazenamento seguro do Claude Code, nunca no repositório.",
+      "required": false,
+      "sensitive": true
+    },
+    "hermesApiKey": {
+      "type": "string",
+      "title": "Chave da API do Hermes (opcional)",
+      "description": "API_SERVER_KEY do servidor HTTP do Hermes (127.0.0.1:8642). Guardada no armazenamento seguro do Claude Code.",
+      "required": false,
+      "sensitive": true
+    }
+  }
+}

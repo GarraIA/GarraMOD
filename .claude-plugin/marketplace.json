@@ -1,0 +1,17 @@
+{
+  "name": "garraia-mods",
+  "owner": { "name": "GarraIA Contributors", "url": "https://github.com/michelbr84/GarraRUST" },
+  "metadata": {
+    "description": "MODs do GarraIA para o Claude Code: identidade brasileira, tema Garra Brasil e ponte multiagente com GarraIA e Hermes."
+  },
+  "plugins": [
+    {
+      "name": "garra-mod",
+      "source": "./plugins/garra-mod",
+      "description": "GarraIA Claude Code: pt-BR, tema Garra Brasil, painel /garra e ponte multiagente real com GarraIA e Hermes.",
+      "version": "0.1.0",
+      "license": "MIT",
+      "keywords": ["garraia", "pt-BR", "multiagente", "hermes", "tema"]
+    }
+  ]
+}
