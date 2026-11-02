@@ -8,7 +8,7 @@ import type { Elements, EngineInterface, PluginOptions, Register, RenderElement,
 import type { GarraAgent, GarraAgentEntry, GarraDiag, GarraDiagItem, GarraExt, GarraHealth, GarraHistoryEntry, GarraMeta, GarraPrefs, GarraSkill, GarraTab } from '../types'
 import { callAgent, type CallOutcome, makeLimiter, type Modo, probeAgent } from '../src/connectors'
 import { lerConfigGarraIA } from '../src/connectors/garraia-config'
-import { lerConfigHermes, usaHermes } from '../src/connectors/hermes-config'
+import { lerConfigHermes, lerUltimaChamadaHermes, usaHermes } from '../src/connectors/hermes-config'
 import { resumoDosModelos, type ResumoModelo } from '../src/connectors/modelos'
 import { detectExts, detectSkills, toolNameSet } from '../src/core/detect'
 import { formatAgents, formatExts, formatOutcome, formatStatus } from '../src/core/format'
@@ -23,7 +23,7 @@ import { defaultLayer, findAgent, mergeAgents, parseAgentFile, validateAgent } f
 import { oneLine, redactSecrets } from '../src/security/sanitize'
 import { cores, isLightTheme, lerSkinGarra, mesmaLista, salvarFrasesNoSkin, saveGarraSkin, SKIN_NAME, SKIN_SPINNER, skinsAvailable, skinsCall, skinsCurrent } from '../src/themes/garra-brasil'
 
-const VERSION = '0.1.9'
+const VERSION = '0.1.10'
 const PANE = 'garra'
 const PLACE = 'abertura'
 
@@ -441,12 +441,15 @@ async function statusText_($: EngineInterface) {
 }
 
 // Modelos por agente, relidos na hora: o que o MOD passa ao GarraIA (do
-// config.yml dele, o mesmo que a chamada usa) e o que o Hermes usa (do
-// config.yaml dele; o MOD não passa modelo ao Hermes).
+// config.yml dele, o mesmo que a chamada usa), o que o Hermes usa (do
+// config.yaml dele; o MOD não passa modelo ao Hermes) e o modelo da última
+// chamada do Hermes à API (do fim do agent.log dele, de qualquer sessão).
 async function modelosPorAgente($: EngineInterface, agents: readonly GarraAgentEntry[]): Promise<Record<string, ResumoModelo>> {
   const garraia = await lerConfigGarraIA($)
-  const hermes = agents.some(usaHermes) ? await lerConfigHermes($) : null
-  return resumoDosModelos(agents, garraia, hermes)
+  const comHermes = agents.some(usaHermes)
+  const hermes = comHermes ? await lerConfigHermes($) : null
+  const observado = comHermes ? await lerUltimaChamadaHermes($) : null
+  return resumoDosModelos(agents, garraia, hermes, observado)
 }
 
 

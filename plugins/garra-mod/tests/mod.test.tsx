@@ -43,6 +43,14 @@ const CONFIG_HERMES = [
   `    api_key: ${CHAVE_FALSA}`,
 ].join('\n')
 const COM_HERMES = { ...COM_CONFIG, '/home/teste/.hermes/config.yaml': CONFIG_HERMES }
+// Fim de um agent.log do Hermes: por último, a sessão do Telegram caiu na reserva.
+// O texto das mensagens (com uma chave falsa) nunca pode aparecer.
+const SESSAO_TG = '20261023_134318_d8ed08b3'
+const LOG_HERMES = [
+  `2026-11-02 06:52:42,975 INFO [${SESSAO_TG}] agent.turn_context: conversation turn: session=${SESSAO_TG} model=gpt-6.1-sol provider=openai-codex platform=telegram history=145 msg='[Replying to: minha chave ${CHAVE_FALSA}]'`,
+  '2026-11-02 07:00:01,000 INFO [local-aaaa1111bbbb2222] agent.conversation_loop: API call #1: model=gpt-6.1-sol provider=openai-codex in=10 out=2',
+  `2026-11-02 07:05:47,196 INFO [${SESSAO_TG}] agent.conversation_loop: API call #2: model=anthropic/claude-haiku-5.5 provider=openrouter in=10 out=2`,
+].join('\n')
 
 type World = {
   mcpUp?: boolean
@@ -134,6 +142,50 @@ describe('carga e comandos', () => {
     expect(out.text).toContain('Modelo que o MOD passa ao GarraIA')
     expect(out.text).not.toContain('z-ai/glm-5.3-flash')
     expect(out.text).not.toContain(CHAVE_FALSA)
+  })
+
+  test('/garra-status mostra o último modelo observado do Hermes, do fim do agent.log (qualquer sessão)', async ($, on) => {
+    ambiente(on, { files: { ...COM_HERMES, '/home/teste/.hermes/logs/agent.log': LOG_HERMES } })
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const out = await $.command.run({ command: 'garra-status', args: '' } as never)
+    expect(out.text).toContain('🪶 Modelo configurado no Hermes: openai-codex · gpt-6.1-sol')
+    expect(out.text).toContain('🪶 Último modelo observado no Hermes: openrouter · anthropic/claude-haiku-5.5 (uma das reservas) — em 2026-11-02 07:05:47 (telegram), lido de ~/.hermes/logs/agent.log')
+    expect(out.text).not.toContain('Replying to')
+    expect(out.text).not.toContain(CHAVE_FALSA)
+  })
+
+  test('/garra-status: o log girou e a última chamada está no agent.log.1', async ($, on) => {
+    ambiente(on, {
+      files: {
+        ...COM_HERMES,
+        '/home/teste/.hermes/logs/agent.log': '2026-11-02 08:00:00,000 INFO [-] gateway.run: log iniciado\n',
+        '/home/teste/.hermes/logs/agent.log.1': LOG_HERMES,
+      },
+    })
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const out = await $.command.run({ command: 'garra-status', args: '' } as never)
+    expect(out.text).toContain('(uma das reservas) — em 2026-11-02 07:05:47 (telegram), lido de ~/.hermes/logs/agent.log.1')
+  })
+
+  test('/garra-status sem chamada no log: diz "nenhum" e o motivo, sem inventar', async ($, on) => {
+    ambiente(on, { files: { ...COM_HERMES, '/home/teste/.hermes/logs/agent.log': '2026-11-02 08:00:00,000 INFO [-] gateway.run: log iniciado\n' } })
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const out = await $.command.run({ command: 'garra-status', args: '' } as never)
+    expect(out.text).toContain('🪶 Último modelo observado no Hermes: nenhum — nenhuma chamada à API no fim do ~/.hermes/logs/agent.log')
+  })
+
+  test('/garra-status sem agent.log diz que ele não foi encontrado', async ($, on) => {
+    ambiente(on, { files: COM_HERMES })
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const out = await $.command.run({ command: 'garra-status', args: '' } as never)
+    expect(out.text).toContain('🪶 Último modelo observado no Hermes: nenhum — ~/.hermes/logs/agent.log não encontrado')
+  })
+
+  test('/garra-status sem pasta do Hermes não mostra modelo observado', async ($, on) => {
+    ambiente(on, { files: COM_CONFIG })
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const out = await $.command.run({ command: 'garra-status', args: '' } as never)
+    expect(out.text).not.toContain('Último modelo observado')
   })
 
   test('a personalidade entra no prompt de sistema', async ($, on) => {

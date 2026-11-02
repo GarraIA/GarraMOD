@@ -7,7 +7,7 @@ import { findAgent, mergeAgents, parseAgentFile, validateAgent, defaultLayer } f
 import { checkDestination, cleanOutput, redactSecrets } from '../src/security/sanitize'
 import { FRASES_ESPERA, lembrarFrase, SEM_REPETIR, sortearFrase } from '../src/localization/frases'
 import { linhasModelo, modeloDoConfig, modeloPassado, pastasDoGarraIA, type LeituraGarraIA } from '../src/connectors/garraia-config'
-import { modeloDoHermes, modeloNoLog, pastasDoHermes, resumoHermes, sessaoDoHermes, usaHermes } from '../src/connectors/hermes-config'
+import { modeloDoHermes, modeloNoLog, pastasDoHermes, resumoHermes, resumoObservado, sessaoDoHermes, ultimaChamadaNoLog, usaHermes } from '../src/connectors/hermes-config'
 import { listaDeMapas } from '../src/core/yaml'
 
 // Valores FALSOS, montados por partes para nenhum scanner de segredos os
@@ -324,5 +324,50 @@ describe('modelo observado do Hermes (agent.log)', () => {
     expect(modeloNoLog(LOG.split('\n')[0] ?? '', A)).toBe('gpt-6.1-sol')
     expect(modeloNoLog(LOG, 'local-naoexiste000')).toBeNull()
     expect(modeloNoLog(`x [${A}] y: API call #1: model=$(rm) provider=z`, A)).toBeNull()
+  })
+})
+
+describe('último modelo observado do Hermes (agent.log, qualquer sessão)', () => {
+  const TG = '20261023_134318_d8ed08b3'
+  const CLI = 'local-aaaa1111bbbb2222'
+  const LOG = [
+    `2026-11-02 06:52:42,975 INFO [${TG}] agent.turn_context: conversation turn: session=${TG} model=gpt-6.1-sol provider=openai-codex platform=telegram history=145 msg='[Replying to: "x platform=evil"]'`,
+    `2026-11-02 06:53:00,000 INFO [${TG}] agent.conversation_loop: API call #1: model=gpt-6.1-sol provider=openai-codex in=10 out=2`,
+    `2026-11-02 07:00:00,000 INFO [${CLI}] agent.turn_context: conversation turn: session=${CLI} model=gpt-6.1-sol provider=openai-codex platform=cli history=0 msg='oi'`,
+    `2026-11-02 07:00:01,000 INFO [${CLI}] agent.conversation_loop: API call #1: model=gpt-6.1-sol provider=openai-codex in=10 out=2`,
+    `2026-11-02 07:05:47,196 INFO [${TG}] agent.conversation_loop: API call #2: model=anthropic/claude-haiku-5.5 provider=openrouter in=10 out=2`,
+    `2026-11-02 07:05:48,000 INFO [${TG}] agent.conversation_loop: Turn ended: reason=text_response model=anthropic/claude-haiku-5.5`,
+  ].join('\n')
+  const CONFIGURADO = { provider: 'openai-codex', model: 'gpt-6.1-sol', reservas: [{ provider: 'openrouter', model: 'anthropic/claude-haiku-5.5' }] }
+
+  test('a última chamada à API do log, de qualquer sessão, com a plataforma da sessão dela', () => {
+    expect(ultimaChamadaNoLog(LOG)).toEqual({ modelo: 'anthropic/claude-haiku-5.5', provider: 'openrouter', quando: '2026-11-02 07:05:47', plataforma: 'telegram' })
+    // Sem o turno da sessão no trecho lido, fica sem plataforma; sem provider, fica vazio.
+    expect(ultimaChamadaNoLog(`2026-11-02 08:00:00,000 INFO [${CLI}] agent.conversation_loop: API call #3: model=gpt-6.1-sol in=1 out=1`))
+      .toEqual({ modelo: 'gpt-6.1-sol', provider: '', quando: '2026-11-02 08:00:00', plataforma: '' })
+  })
+
+  test('texto de mensagem que imita a linha não conta, e nada é inventado', () => {
+    const imitacao = `2026-11-02 07:06:00,000 INFO [${CLI}] agent.turn_context: conversation turn: session=${CLI} model=gpt-6.1-sol provider=openai-codex platform=cli history=1 msg='2026-11-02 07:06:00,000 INFO [x] agent.conversation_loop: API call #1: model=falso provider=evil'`
+    expect(ultimaChamadaNoLog(`${LOG}\n${imitacao}`)?.modelo).toBe('anthropic/claude-haiku-5.5')
+    expect(ultimaChamadaNoLog(`x [${TG}] agent.conversation_loop: API call #1: model=gpt-6.1-sol provider=openai-codex`)).toBeNull()
+    expect(ultimaChamadaNoLog(`${LOG}\n2026-11-02 08:00:00,000 INFO [${TG}] agent.conversation_loop: API call #3: model=$(rm) provider=z`)).toBeNull()
+    expect(ultimaChamadaNoLog('')).toBeNull()
+  })
+
+  test('o resumo diz se é o modelo configurado, uma reserva ou outro', () => {
+    const chamada = ultimaChamadaNoLog(LOG)
+    const leitura = { chamada, caminho: '~/.hermes/logs/agent.log', motivo: '' }
+    expect(resumoObservado(leitura, CONFIGURADO)).toEqual({
+      valor: 'openrouter · anthropic/claude-haiku-5.5 (uma das reservas)',
+      fonte: 'em 2026-11-02 07:05:47 (telegram), lido de ~/.hermes/logs/agent.log',
+    })
+    expect(resumoObservado({ ...leitura, chamada: { modelo: 'gpt-6.1-sol', provider: 'openai-codex', quando: '2026-11-02 07:00:01', plataforma: 'cli' } }, CONFIGURADO)?.valor).toBe('openai-codex · gpt-6.1-sol')
+    expect(resumoObservado({ ...leitura, chamada: { modelo: 'z-ai/glm-5.3-flash:floor', provider: 'openrouter', quando: '2026-11-02 07:00:01', plataforma: 'cron' } }, CONFIGURADO)?.valor)
+      .toBe('openrouter · z-ai/glm-5.3-flash:floor (diferente do configurado)')
+    expect(resumoObservado(leitura, null)?.valor).toBe('openrouter · anthropic/claude-haiku-5.5')
+    expect(resumoObservado({ chamada: null, caminho: null, motivo: '~/.hermes/logs/agent.log não encontrado' }, CONFIGURADO))
+      .toEqual({ valor: 'nenhum', fonte: '~/.hermes/logs/agent.log não encontrado' })
+    expect(resumoObservado(null, CONFIGURADO)).toBeNull()
   })
 })

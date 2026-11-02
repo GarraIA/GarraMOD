@@ -51,7 +51,9 @@ export function formatModelos(modelos: ReadonlyArray<{ agent: GarraAgentEntry; r
     const passa = resumo.passa.map(l => `${icon} Modelo que o MOD passa ao ${agent.nome} (MCP, ${l.rotulo}): ${l.valor} — ${l.fonte}`)
     const c = resumo.configurado
     const configurado = c ? [`${icon} Modelo configurado no ${agent.nome}: ${c.valor}${c.reservas ? ` (reservas: ${c.reservas})` : ''} — ${c.fonte}`] : []
-    return [...passa, ...configurado]
+    const o = resumo.observado
+    const observado = o ? [`${icon} Último modelo observado no ${agent.nome}: ${o.valor} — ${o.fonte}`] : []
+    return [...passa, ...configurado, ...observado]
   })
 }
 

@@ -152,6 +152,83 @@ export async function modeloObservadoHermes($: EngineInterface, sessao: string):
   }
 }
 
+// ------------------------------------------------------------------ último observado
+// Para o /garra-status: a última `API call #N: model=… provider=…` do agent.log,
+// de qualquer sessão (CLI, Telegram, WhatsApp, cron, o próprio MOD). Só a hora,
+// o modelo, o provedor e a plataforma da sessão saem do log; o texto das
+// mensagens não. A linha precisa começar no formato do logger (data, nível,
+// [sessão], módulo), então um texto de mensagem que imite a linha não conta.
+
+export type UltimaChamada = { modelo: string; provider: string; quando: string; plataforma: string }
+
+const CHAMADA = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})[,.]\d+ [A-Z]+ (\[[^\]\s]+\]) [\w.]+: API call #\d+: model=(\S+)(?: provider=(\S+))?/
+const TURNO = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[,.]\d+ [A-Z]+ (\[[^\]\s]+\]) [\w.]+: conversation turn: (.*)$/
+const PLATAFORMA = /(?:^|\s)platform=([a-z][a-z0-9_-]{0,31})(?=\s|$)/
+
+export function ultimaChamadaNoLog(log: string): UltimaChamada | null {
+  const linhas = log.split('\n')
+  for (let i = linhas.length - 1; i >= 0; i--) {
+    const m = CHAMADA.exec(linhas[i] ?? '')
+    if (!m) continue
+    const [, quando = '', tag = '', modelo = '', provider = ''] = m
+    // A última chamada vale; se ela não for confiável, nada é inventado.
+    if (!MODELO.test(modelo)) return null
+    return { modelo, provider: NOME.test(provider) ? provider : '', quando, plataforma: plataformaDaSessao(linhas, i, tag) }
+  }
+  return null
+}
+
+// A plataforma da sessão, do `conversation turn` mais recente dela antes da
+// chamada. Só o trecho antes de `msg=` é lido.
+function plataformaDaSessao(linhas: readonly string[], ate: number, tag: string): string {
+  for (let i = ate; i >= 0; i--) {
+    const t = TURNO.exec(linhas[i] ?? '')
+    if (!t || t[1] !== tag) continue
+    const campos = (t[2] ?? '').split(' msg=')[0] ?? ''
+    return PLATAFORMA.exec(campos)?.[1] ?? ''
+  }
+  return ''
+}
+
+export type LeituraObservado = { chamada: UltimaChamada | null; caminho: string | null; motivo: string }
+
+// `null` quando não há pasta do Hermes nesta máquina (nada a mostrar). Tenta o
+// agent.log.1 quando o log acabou de girar e ainda não tem chamada.
+export async function lerUltimaChamadaHermes($: EngineInterface): Promise<LeituraObservado | null> {
+  try {
+    const achou = await pastaDoHermes($)
+    if (achou === null) return null
+    const { pasta, home } = achou
+    let leu = false
+    for (const nome of ['agent.log', 'agent.log.1']) {
+      const arquivo = `${pasta}/logs/${nome}`
+      const texto = await fimDoArquivo($, arquivo)
+      if (texto === null) continue
+      leu = true
+      const chamada = ultimaChamadaNoLog(texto)
+      if (chamada !== null) return { chamada, caminho: encurtar(arquivo, home), motivo: '' }
+    }
+    const log = encurtar(`${pasta}/logs/agent.log`, home)
+    return { chamada: null, caminho: null, motivo: leu ? `nenhuma chamada à API no fim do ${log}` : `${log} não encontrado` }
+  } catch {
+    return { chamada: null, caminho: null, motivo: 'não foi possível ler o agent.log do Hermes' }
+  }
+}
+
+// O que mostrar: o modelo, se é o configurado ou uma reserva, e quando/de onde.
+export function resumoObservado(l: LeituraObservado | null, configurado: ModeloHermes | null): { valor: string; fonte: string } | null {
+  if (l === null) return null
+  if (l.chamada === null) return { valor: 'nenhum', fonte: l.motivo }
+  const c = l.chamada
+  const nota = configurado === null || c.modelo === configurado.model ? ''
+    : configurado.reservas.some(r => r.model === c.modelo) ? ' (uma das reservas)'
+    : ' (diferente do configurado)'
+  return {
+    valor: `${[c.provider, c.modelo].filter(Boolean).join(' · ')}${nota}`,
+    fonte: `em ${c.quando}${c.plataforma ? ` (${c.plataforma})` : ''}, lido de ${l.caminho ?? '?'}`,
+  }
+}
+
 // O que mostrar: `null` quando não há config legível (fica "configurado pelo próprio agente").
 export function resumoHermes(l: LeituraHermes): { valor: string; reservas: string; fonte: string } | null {
   if (l.modelo === null) return null
