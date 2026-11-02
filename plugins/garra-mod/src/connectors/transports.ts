@@ -16,7 +16,7 @@ export type TransportCtx = {
   options: PluginOptions
   timeoutS: number
   cwd: string
-  // A pessoa escolheu o modo skip nesta delegação (nunca é automático).
+  // Modo skip nesta delegação: escolha da pessoa ou Claude Code em modo bypass (nunca do modelo).
   skip?: boolean
 }
 

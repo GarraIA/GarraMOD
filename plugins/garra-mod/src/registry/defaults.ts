@@ -36,7 +36,7 @@ export const DEFAULT_AGENTS: readonly GarraAgent[] = [
       { type: 'process', argv: ['garra', 'ask', '--json', '--timeout-secs', '{timeout}'], output: 'garra.ask.v1' },
     ],
     delegar: [
-      // garra_agent: agente completo com shell, arquivos, git e web. Sempre com aprovação.
+      // garra_agent: agente completo com shell, arquivos, git e web. Com aprovação (exceto no modo bypass).
       { type: 'mcp', server: 'garraia', tool: 'garra_agent', messageArg: 'message', args: { timeout_secs: '{timeout}', working_dir: '{cwd}' }, output: 'garra.agent.v1' },
     ],
     sessao: { compartilharHistorico: false, maxEntradaKB: 60 },
@@ -63,7 +63,8 @@ export const DEFAULT_AGENTS: readonly GarraAgent[] = [
     ],
     delegar: [
       // Sem --yolo por padrão: as confirmações do próprio Hermes continuam valendo.
-      // --yolo só entra se a PESSOA escolher "modo skip" na confirmação de riscos.
+      // --yolo só entra se a PESSOA escolher "modo skip" na confirmação de riscos,
+      // ou com o Claude Code em modo bypass (escolha dela ao iniciar a sessão).
       {
         type: 'process',
         argv: ['hermes', 'chat', '--query-file', '-', '--quiet', '--source', 'tool', '--toolsets', 'web,file,terminal,code_execution', '--in', '{cwd}', '--max-turns', '40'],

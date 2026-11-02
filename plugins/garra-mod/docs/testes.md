@@ -31,8 +31,9 @@ Ambiente da validação: Linux, Claude Code **2.1.316**, GarraIA **0.4.10** (gat
 | Next Steps | após um turno real: "🦜 GarraIA sugere:" com as sugestões e atalhos 1/2/3/0 do próprio Next Steps. Até a 0.1.2, com o Next Steps antes do Garra na lista de plugins, ele ficava por fora na cadeia e o rótulo saía em inglês; desde a 0.1.3 a tradução vem pelo `ui.resolve` e os testes cobrem as duas ordens |
 | Frases de espera | sessões reais num pseudo-terminal com o MOD instalado: veja "Frases de espera (0.1.4)" abaixo |
 | Personalidade | resposta real em pt-BR com a identidade do GarraIA |
-| Delegação sob `--permission-mode bypassPermissions`, sem pessoa (`-p`) | recusada: "NÃO executada: ninguém pôde aprovar"; o Hermes não foi chamado |
-| Delegação sob bypass, sessão interativa | 1) "Aprovar a delegação…?" 2) confirmação de riscos com *Executar com segurança / Executar em modo skip / Cancelar*; com segurança, o Hermes rodou sem `--yolo` e respondeu "OK" |
+| Delegação sob `--permission-mode bypassPermissions`, sem pessoa (`-p`) | até a 0.1.4: recusada ("NÃO executada: ninguém pôde aprovar"). Desde a 0.1.5 (2026-11-02): `claude -p --dangerously-skip-permissions` delegou ao GarraIA sem perguntas, com a linha `[Garra MOD: aprovação: modo bypass do Claude Code (sem perguntas) · escolha: Executar com segurança]`, e o arquivo pedido foi criado |
+| Delegação em `claude -p` sem bypass (2026-11-02) | recusada: "NÃO executada: ninguém pôde aprovar"; o arquivo pedido não foi criado |
+| Delegação sob bypass, sessão interativa | até a 0.1.4: 1) "Aprovar a delegação…?" 2) confirmação de riscos com *Executar com segurança / Executar em modo skip / Cancelar*; com segurança, o Hermes rodou sem `--yolo` e respondeu "OK". Desde a 0.1.5: sem perguntas, com o modo skip do agente |
 | You Should Know | ativo: mostrou um aviso real acima do prompt durante o desenvolvimento |
 
 ## Frases de espera (0.1.4)

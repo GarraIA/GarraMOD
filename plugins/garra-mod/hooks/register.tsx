@@ -81,6 +81,7 @@ const S: {
   cwd: string
   limiter: ReturnType<typeof makeLimiter>
   aprovadas: Map<string, number>
+  modo: string | undefined
   logo: string | null
   skinAtual: string | null
   spinnerDoGarra: boolean
@@ -91,6 +92,9 @@ const S: {
   limiter: makeLimiter(),
   // Delegações cuja caixa de permissão a pessoa viu (chave → quando).
   aprovadas: new Map(),
+  // Último modo de permissão que o Claude Code informou (permission_mode dos
+  // eventos clássicos). Desconhecido até o primeiro prompt: aí vale o modo com perguntas.
+  modo: undefined,
   // Logo oficial do GarraRUST (PNG em base64), lido no início da sessão.
   logo: null,
   // Skin em uso no Claude Skins na última consulta (null: sem Skins ou sem resposta).
@@ -456,20 +460,38 @@ async function removeAgent($: EngineInterface, id: string): Promise<string> {
 }
 
 
-// Toda delegação passa por uma pessoa, em qualquer modo de permissão:
+// Fora do modo bypass, toda delegação passa por uma pessoa:
 // 1) aprovação: a caixa de permissão do Claude Code, ou, quando ela não aparece
-//    (bypassPermissions, aprovação automática), a pergunta do próprio MOD;
+//    (aprovação automática), a pergunta do próprio MOD;
 // 2) confirmação de riscos, SEMPRE, mesmo depois de aprovada; é só nela que a
 //    pessoa pode escolher o modo skip (ex.: --yolo do Hermes). O modelo não pede skip.
 // Sem pessoa para responder (claude -p, pergunta dispensada), nada é executado.
-// `decisao` registra como foi aprovada e o que a pessoa escolheu, para o resultado e o histórico.
+// No modo bypass (--dangerously-skip-permissions), escolha da pessoa ao iniciar o
+// Claude Code: delega sem perguntas, também no claude -p, e com o modo skip do
+// agente quando ele tem um (ex.: --yolo do Hermes).
+// `decisao` registra como foi aprovada e o que foi escolhido, para o resultado e o histórico.
 type Decision = { kind: 'executar'; skip: boolean; decisao: string } | { kind: 'parar'; text: string }
+
+// O modo chega em todo evento clássico (permission_mode); guarda o último informado.
+function lembrarModo(e: unknown) {
+  const mode = (e as { permission_mode?: unknown } | null)?.permission_mode
+  if (typeof mode === 'string' && mode !== '') S.modo = mode
+}
+
+function emBypass(): boolean {
+  return S.modo === 'bypassPermissions'
+}
 
 async function confirmDelegation($: EngineInterface, agent: GarraAgentEntry, input: Record<string, unknown>, tarefa: string): Promise<Decision> {
   const key = delegationKey(input)
   const now = await $.clock.now()
   const seen = S.aprovadas.get(key)
   S.aprovadas.delete(key)
+  const skipArgs = (agent.delegar ?? []).flatMap(t => (t.type === 'process' ? (t.skipArgs ?? []) : []))
+  if (emBypass()) {
+    const skip = skipArgs.length > 0
+    return { kind: 'executar', skip, decisao: TXT.decisao(TXT.aprovacaoBypass, skip ? TXT.executarSkip : TXT.executarSeguro) }
+  }
   const approvedByDialog = seen !== undefined && now - seen <= 10 * 60_000
   if (!approvedByDialog) {
     const answer = await $.ui.ask(TXT.aprovarPergunta(agent.nome, oneLine(tarefa, 160)), { header: 'Garra MOD', options: [TXT.aprovar, TXT.recusar] }).catch(() => null)
@@ -477,7 +499,6 @@ async function confirmDelegation($: EngineInterface, agent: GarraAgentEntry, inp
     if (answer !== TXT.aprovar) return { kind: 'parar', text: `${TXT.recusada(agent.nome)} (resposta: ${oneLine(answer, 60)})` }
   }
   const aprovacao = approvedByDialog ? TXT.aprovacaoCaixa : TXT.aprovacaoPergunta
-  const skipArgs = (agent.delegar ?? []).flatMap(t => (t.type === 'process' ? (t.skipArgs ?? []) : []))
   const options = skipArgs.length > 0 ? [TXT.executarSeguro, TXT.executarSkip, TXT.cancelar] : [TXT.executarSeguro, TXT.cancelar]
   const risk = await $.ui.ask(TXT.riscosPergunta(agent.nome, [...new Set(skipArgs)].join(' ')), { header: 'Riscos', options }).catch(() => null)
   if (risk === null) return { kind: 'parar', text: TXT.semHumano(agent.nome) }
@@ -565,7 +586,7 @@ export const register: Register = (on, options) => {
     await $.tool.register({
       name: 'garra_delegar',
       description:
-        'Delega uma TAREFA a um agente externo com ferramentas (shell, arquivos, git, web) que agem direto nesta máquina, fora das permissões do Claude Code. Uma pessoa sempre aprova e depois confirma os riscos, em qualquer modo de permissão; só ela pode escolher o modo skip. Use só quando a pessoa pedir delegação explícita; para perguntas use garra_consultar.',
+        'Delega uma TAREFA a um agente externo com ferramentas (shell, arquivos, git, web) que agem direto nesta máquina, fora das permissões do Claude Code. Uma pessoa aprova e depois confirma os riscos; só ela pode escolher o modo skip. Exceção: com o Claude Code em modo bypass (--dangerously-skip-permissions), roda sem perguntas e com o modo skip do agente. Use só quando a pessoa pedir delegação explícita; para perguntas use garra_consultar.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -727,10 +748,26 @@ export const register: Register = (on, options) => {
     return next(e)
   }).catch(($, e, next) => next(e))
 
-  // Delegar dá ferramentas a outro agente: a pessoa aprova cada vez, qualquer que seja o modo.
+  // O modo de permissão vem nos eventos clássicos; o MOD só lê e deixa seguir.
+  on('classic.UserPromptSubmit', async ($, e, next) => {
+    lembrarModo(e)
+    return next(e)
+  }).catch(($, e, next) => next(e))
+  on('classic.PostToolUse', async ($, e, next) => {
+    lembrarModo(e)
+    return next(e)
+  }).catch(($, e, next) => next(e))
+  on('classic.SessionStart', async ($, e, next) => {
+    lembrarModo(e)
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  // Delegar dá ferramentas a outro agente: fora do bypass, a pessoa aprova cada vez.
+  // No bypass vale a decisão do Claude Code (que libera), sem a pergunta do MOD.
   on('tool.check', { tool: 'mcp__garra-mod__garra_delegar' }, async ($, e, next) => {
     const below = await next(e)
     if (below.decision === 'deny') return below
+    if (emBypass()) return below
     const input = (e.input ?? {}) as Record<string, unknown>
     const agents = await read($, agentsAtom)
     const nome = findAgent(agents, str(input.agente))?.nome ?? str(input.agente)

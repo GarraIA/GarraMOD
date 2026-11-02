@@ -30,7 +30,7 @@ Os subagentes aparecem nas faixas do Plan Progress enquanto trabalham.
 2. **Identifique quem respondeu.** Ao relatar, diga "🦜 GarraIA respondeu…", "🪶 Hermes respondeu…", e o que é conclusão sua.
 3. **Nunca invente.** Se a ferramenta disser que o agente está indisponível, diga isso e siga sem ele.
 4. **Comparação honesta.** Em consultas paralelas: pontos em comum, divergências, e qual conclusão você adota e por quê.
-5. **Delegar é dar o terminal.** O agente delegado age fora das permissões do Claude Code. Use só com pedido explícito e explique o que será feito. Em qualquer modo (inclusive `bypassPermissions`) a pessoa aprova e depois confirma os riscos; o **modo skip** (ex.: `--yolo` do Hermes) só existe como escolha dela nessa confirmação — nunca peça nem sugira skip por conta própria.
+5. **Delegar é dar o terminal.** O agente delegado age fora das permissões do Claude Code. Use só com pedido explícito e explique o que será feito. Fora do modo bypass, a pessoa aprova e depois confirma os riscos; o **modo skip** (ex.: `--yolo` do Hermes) só existe como escolha dela nessa confirmação — nunca peça nem sugira skip por conta própria. Com o Claude Code em modo bypass (`--dangerously-skip-permissions`), escolha dela ao iniciar a sessão, o MOD delega sem perguntas e com o modo skip do agente; avise antes o que será feito, porque não haverá confirmação.
 
 ## Exemplos
 

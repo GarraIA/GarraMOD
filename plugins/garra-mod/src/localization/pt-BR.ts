@@ -51,6 +51,7 @@ export const TXT = {
     ].join(' '),
   aprovacaoCaixa: 'caixa de permissão do Claude Code',
   aprovacaoPergunta: 'pergunta do Garra MOD',
+  aprovacaoBypass: 'modo bypass do Claude Code (sem perguntas)',
   decisao: (aprovacao: string, escolha: string) => `aprovação: ${aprovacao} · escolha: ${escolha}`,
   executarSeguro: 'Executar com segurança',
   executarSkip: 'Executar em modo skip',

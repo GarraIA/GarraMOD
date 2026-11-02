@@ -96,15 +96,16 @@ Os testes **G** e **H** usam só consulta (somente leitura). Os testes **M** sã
 
 ### M2 — Modo skip só por escolha sua
 - **Pedido:** igual ao M1, escolhendo **Executar em modo skip** na mensagem de riscos.
-- **Esperado:** o resultado mostra `CLI hermes (modo skip: --yolo)` e `escolha: Executar em modo skip`. Em nenhum outro caminho o `--yolo` aparece.
+- **Esperado:** o resultado mostra `CLI hermes (modo skip: --yolo)` e `escolha: Executar em modo skip`. Fora desse caminho, o `--yolo` só aparece com o Claude Code em modo bypass (M4).
 
 ### M3 — Recusa
 - **Pedido:** igual ao M1, respondendo **Recusar** na primeira pergunta.
 - **Esperado:** "Delegação a Hermes recusada pela pessoa. (resposta: Recusar)" e nenhum arquivo criado.
 
 ### M4 — Sob `--permission-mode bypassPermissions`
-- **Pedido:** M1 numa sessão iniciada com `claude --permission-mode bypassPermissions`.
-- **Esperado:** as duas perguntas aparecem mesmo assim. Em `claude -p` (sem ninguém para responder), a delegação **não** roda.
+- **Pedido:** M1 numa sessão iniciada com `claude --permission-mode bypassPermissions` (ou `--dangerously-skip-permissions`).
+- **Esperado (desde 2026-11-02):** nenhuma pergunta; a delegação roda direto, também em `claude -p`, e o resultado traz `[Garra MOD: aprovação: modo bypass do Claude Code (sem perguntas) · escolha: Executar em modo skip]` no Hermes (`--yolo`) ou `… · escolha: Executar com segurança` no GarraIA. Sem bypass, `claude -p` continua **sem** rodar a delegação.
+- **Até a 0.1.4:** as duas perguntas apareciam mesmo sob bypass, e `claude -p` nunca delegava.
 
 ## Resultados — 2026-11-01
 
