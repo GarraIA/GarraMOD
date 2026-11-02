@@ -31,11 +31,11 @@ export const SKIN_PALETTE = {
   other: '#C9D3CC',
 } as const
 
-// As mensagens de espera da CLI do GarraIA (GarraRUST, garraia-cli/src/ui/spinner.rs),
-// dentro dos limites do Skins: até 12 frases de até 24 caracteres. Ficam de fora
-// "Servindo café aos transistores…" (30 caracteres), "Quase lá…" (o Claude Code
-// sorteia a frase no início do turno) e duas repetidas sobre escrever a resposta.
-// As de personalidade seguem em minoria (3 de 12, como o GarraRUST exige: até ¼).
+// A lista fixa do garra-brasil: as mensagens de espera da CLI do GarraIA (GarraRUST,
+// garraia-cli/src/ui/spinner.rs) dentro dos limites do Skins (até 12 frases de até
+// 24 caracteres). É a que fica salva com `/garra-config frases off`; com as frases
+// ligadas, o MOD põe ali uma frase sorteada da coleção (src/localization/frases.ts)
+// a cada turno.
 export const SKIN_SPINNER = [
   'Processando',
   'Consultando o modelo',
@@ -113,30 +113,47 @@ export async function skinsCurrent($: EngineInterface): Promise<{ current: strin
   }
 }
 
-// O garra-brasil está em uso no Skins com uma lista de frases que o MOD já
-// trocou e que ninguém editou?
-export async function garraSkinDesatualizado($: EngineInterface): Promise<boolean> {
+export const mesmaLista = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((w, i) => w === b[i])
+
+// O skin em uso no Skins e, quando é o garra-brasil, se a lista de frases dele é
+// uma das que o próprio MOD escreve (a fixa, uma antiga ou uma frase da coleção).
+// Uma lista que a pessoa editou não é do MOD, e o MOD não mexe nela.
+export async function lerSkinGarra(
+  $: EngineInterface,
+  frasesDoMod: readonly string[],
+): Promise<{ current: string; spinner: string[]; doMod: boolean } | null> {
   const show = await skinsCall($, { action: 'show' })
-  if (!show.ok) return false
+  if (!show.ok) return null
   try {
     const data = JSON.parse(show.text) as { current?: unknown; spinner?: unknown }
-    if (data.current !== SKIN_NAME || !Array.isArray(data.spinner)) return false
-    const atual = data.spinner
-    return SKIN_SPINNER_ANTIGOS.some(antiga => antiga.length === atual.length && antiga.every((w, i) => w === atual[i]))
+    const current = typeof data.current === 'string' ? data.current : '?'
+    const spinner = Array.isArray(data.spinner) ? data.spinner.filter((x): x is string => typeof x === 'string') : []
+    const doMod =
+      current === SKIN_NAME &&
+      (mesmaLista(spinner, SKIN_SPINNER) ||
+        SKIN_SPINNER_ANTIGOS.some(antiga => mesmaLista(spinner, antiga)) ||
+        (spinner.length === 1 && frasesDoMod.includes(spinner[0] ?? '')))
+    return { current, spinner, doMod }
   } catch {
-    return false
+    return null
   }
 }
 
+// Troca só a lista de frases do garra-brasil: paleta, base e rótulo ficam como
+// estão no Skins (ele completa o que não vem com o que já tinha).
+export async function salvarFrasesNoSkin($: EngineInterface, spinner: readonly string[]) {
+  return skinsCall($, { action: 'save', name: SKIN_NAME, spinner: [...spinner] })
+}
+
 // Salva (ou atualiza) o tema garra-brasil no Skins e o aplica.
-export async function saveGarraSkin($: EngineInterface, apply: boolean) {
+export async function saveGarraSkin($: EngineInterface, apply: boolean, spinner: readonly string[] = SKIN_SPINNER) {
   return skinsCall($, {
     action: 'save',
     name: SKIN_NAME,
     label: 'Garra Brasil',
     base: SKIN_BASE,
     palette: SKIN_PALETTE,
-    spinner: SKIN_SPINNER,
+    spinner: [...spinner],
     done: SKIN_DONE,
     apply,
   })

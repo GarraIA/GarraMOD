@@ -5,6 +5,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import { parseChatCompletion, parseEnvelope } from '../src/connectors/parse'
 import { findAgent, mergeAgents, parseAgentFile, validateAgent, defaultLayer } from '../src/registry/registry'
 import { checkDestination, cleanOutput, redactSecrets } from '../src/security/sanitize'
+import { FRASES_ESPERA, lembrarFrase, SEM_REPETIR, sortearFrase } from '../src/localization/frases'
 
 // Valores FALSOS, montados por partes para nenhum scanner de segredos os
 // confundir com chaves reais. Têm o formato que o MOD precisa remover.
@@ -96,5 +97,49 @@ describe('parsers', () => {
   test('chat completions OpenAI', async () => {
     expect(parseChatCompletion('{"model":"x","choices":[{"message":{"content":"oi"}}]}')).toEqual({ ok: true, text: 'oi', modelo: 'x' })
     expect(parseChatCompletion('{"error":{"message":"401"}}').ok).toBe(false)
+  })
+})
+
+describe('frases de espera', () => {
+  // Gerador previsível (congruente linear) para os sorteios do teste.
+  function semente(n: number): () => number {
+    let x = n
+    return () => {
+      x = (x * 1103515245 + 12345) % 2147483648
+      return x / 2147483648
+    }
+  }
+
+  test('a coleção tem pelo menos 40 frases curtas, únicas e sem reticências', async () => {
+    expect(FRASES_ESPERA.length).toBeGreaterThanOrEqual(40)
+    expect(new Set(FRASES_ESPERA).size).toBe(FRASES_ESPERA.length)
+    for (const frase of FRASES_ESPERA) {
+      expect([...frase].length).toBeGreaterThanOrEqual(1)
+      expect([...frase].length).toBeLessThanOrEqual(24)
+      expect(/…|\.\.\./.test(frase)).toBe(false)
+      expect(frase.trim()).toBe(frase)
+    }
+  })
+
+  test('nunca repete nenhuma das últimas 5 em 2000 sorteios, e passa por quase toda a coleção', async () => {
+    const aleatorio = semente(42)
+    let recentes: string[] = []
+    const vistas = new Set<string>()
+    for (let i = 0; i < 2000; i++) {
+      const frase = sortearFrase(recentes, aleatorio)
+      expect(FRASES_ESPERA).toContain(frase)
+      expect(recentes).not.toContain(frase)
+      recentes = lembrarFrase(recentes, frase)
+      vistas.add(frase)
+    }
+    expect(vistas.size).toBe(FRASES_ESPERA.length)
+  })
+
+  test('guarda só as últimas 5 e aguenta o aleatório no limite', async () => {
+    expect(SEM_REPETIR).toBe(5)
+    expect(lembrarFrase(['a', 'b', 'c', 'd', 'e'], 'f')).toEqual(['b', 'c', 'd', 'e', 'f'])
+    expect(FRASES_ESPERA).toContain(sortearFrase([], () => 0.9999999))
+    expect(FRASES_ESPERA).toContain(sortearFrase([], () => 0))
+    expect(sortearFrase(['x', 'y'], () => 0.5, ['x', 'y'])).toMatch(/^[xy]$/)
   })
 })

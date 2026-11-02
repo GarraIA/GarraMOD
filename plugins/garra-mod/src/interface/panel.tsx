@@ -46,7 +46,7 @@ export type PanelActions = {
   setDefault: (id: string) => void
   applyTheme: () => void
   restoreTheme: () => void
-  toggle: (key: 'personalidade' | 'boasVindas' | 'statusLine' | 'localizarNextSteps') => void
+  toggle: (key: 'personalidade' | 'boasVindas' | 'statusLine' | 'localizarNextSteps' | 'frasesEspera') => void
   step: (key: 'timeoutS' | 'concorrencia', delta: number) => void
   idioma: () => void
   diag: () => void
@@ -224,6 +224,7 @@ export function panel(ui: UI, d: PanelData, act: PanelActions) {
                 ['boasVindas', 'Cartão de abertura'],
                 ['statusLine', 'Indicador na linha de status'],
                 ['localizarNextSteps', 'Rótulos do Next Steps em pt-BR'],
+                ['frasesEspera', 'Frases de espera do GarraIA no spinner'],
               ] as const
             ).map(([key, label]) => (
               <Box flexDirection="row" columnGap={1}>

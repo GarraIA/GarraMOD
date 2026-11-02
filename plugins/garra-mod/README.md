@@ -5,7 +5,8 @@
 O Garra MOD veste o Claude Code com a camisa do **GarraIA, Inteligência Artificial Brasileira** 🦜:
 
 - **pt-BR de verdade.** Uma seção curta de personalidade no prompt de sistema faz o Claude responder como um especialista brasileiro em tecnologia. Todos os textos do MOD estão em português.
-- **Tema Garra Brasil**: verde, amarelo, azul e branco, aplicado pelo **Claude Skins**, com as mesmas mensagens de espera da CLI do GarraIA no spinner ("Afiando as garras…", "Farejando bugs…") e rodapé em português ("Feito"). Quem já tinha o tema salvo com a lista antiga do MOD, sem mexer nela, recebe a nova sozinho.
+- **Tema Garra Brasil**: verde, amarelo, azul e branco, aplicado pelo **Claude Skins**, com rodapé em português ("Feito").
+- **Frases de espera do GarraIA**: 44 frases curtas em português no spinner ("Afiando as garras…", "Puxando o fio da meada…", "Passando um cafezinho…"), sorteadas sem repetir nenhuma das últimas 5. Com o Claude Skins desenhando o spinner, muda uma por turno; sem ele, troca a cada 4 s em tarefas longas, mantendo a animação, o tempo e os tokens do Claude Code. Desligue com `/garra-config frases off`.
 - **Abertura GarraIA**: cartão no início da sessão com o estado **real** de cada agente e MOD.
 - **Painel `/garra`** com 9 seções: informações, agentes, conversas, modelos, MODs, skills, tema, configurações e diagnóstico.
 - **Multiagente real**: o Claude consulta, compara e delega para o **GarraIA** (GarraRUST) e o **Hermes** (Nous Research) por conexões reais (MCP, CLI ou HTTP), não por simulação.
@@ -135,7 +136,7 @@ Ao remover, o tema ativo continua no Claude Skins até você trocar com `/skin` 
 | `/garra-consultar <agente> <pergunta>` | Consulta um agente agora e mostra a resposta real. Sem agente, usa o padrão. |
 | `/garra-tema [brasil\|anterior\|salvar\|<skin>]` | Aplica o tema Garra Brasil no Claude Skins, volta ao anterior ou troca de skin. |
 | `/garra-plugins` | MODs integrados e o estado real de cada um. |
-| `/garra-config [chave valor]` | `personalidade`, `boas-vindas`, `status`, `next-steps` (on/off), `padrao <id>`, `prazo <s>`, `paralelo <n>`, `idioma`. |
+| `/garra-config [chave valor]` | `personalidade`, `boas-vindas`, `status`, `next-steps`, `frases` (on/off), `padrao <id>`, `prazo <s>`, `paralelo <n>`, `idioma`. |
 | `/garra-diagnostico [completo]` | Verificações de funcionamento; `completo` faz uma chamada real a cada agente. |
 
 **Nota sobre `/garra-agentes`:** o Claude Code registra primeiro a skill `garra-agentes` com esse nome. Quando **você** digita `/garra-agentes`, o MOD responde direto, sem gastar um turno do modelo; quando o modelo usa a skill, ela continua funcionando normalmente.
@@ -193,7 +194,7 @@ Sem ninguém para responder (`claude -p`, pergunta dispensada ou resposta digita
 
 | MOD | Como o Garra MOD coopera |
 | --- | --- |
-| **Claude Skins** | O tema `garra-brasil` é salvo e aplicado pela ferramenta oficial do Skins (`mcp__skins__design`). `/skin` continua trocando livremente; a variante clara é derivada pelo próprio Skins. |
+| **Claude Skins** | O tema `garra-brasil` é salvo e aplicado pela ferramenta oficial do Skins (`mcp__skins__design`). `/skin` continua trocando livremente; a variante clara é derivada pelo próprio Skins. Com as frases de espera ligadas, o MOD troca só a lista de frases do `garra-brasil` (uma frase sorteada), uma vez por turno e depois que ele termina: paleta, base e rótulo não mudam, e nada é salvo durante o turno, porque cada salvamento do Skins redesenha o transcript. Outro skin em uso ou uma lista editada por você ficam como estão. |
 | **Plan Progress** | Não há segundo sistema de progresso: a personalidade e as skills pedem as barras do Plan Progress com títulos em pt-BR, e os subagentes de ponte aparecem nas faixas de agentes. Chamadas diretas por ferramenta não viram faixas falsas. |
 | **Next Steps** | O MOD só traduz os rótulos ("next:" → "🦜 GarraIA sugere:", "next steps…" → "🦜 GarraIA pensando nos próximos passos…"); botões e atalhos 1/2/3/0 continuam sendo do Next Steps, inclusive o "dismiss". Funciona em qualquer ordem dos plugins: o MOD entrega ao Next Steps, pelo `ui.resolve`, um `Text` que já escreve esses rótulos em português. Desligue com `/garra-config next-steps off` (vale depois de `/reload-plugins` ou numa sessão nova). |
 | **You Should Know** | Componente oficial da Anthropic, embutido. O Garra MOD só verifica se está habilitado; o subagente `garra-mod:revisor` é uma revisão independente e se apresenta como **não** sendo o You Should Know. |

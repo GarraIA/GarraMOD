@@ -119,6 +119,8 @@ export type GarraPrefs = {
   boasVindas: boolean
   statusLine: boolean
   localizarNextSteps: boolean
+  // Frases de espera do GarraIA no spinner (sorteio sem repetir as últimas 5).
+  frasesEspera: boolean
   agentePadrao: string
   timeoutS: number
   concorrencia: number
@@ -170,6 +172,9 @@ declare module 'claude-code' {
       // Quando o hook prompt.compose pôs a seção de personalidade num prompt
       // desta sessão (0 = ainda não). É a prova que o diagnóstico lê.
       persona: number
+      // A frase de espera da vez e as últimas mostradas (não voltam no próximo sorteio).
+      frase: string
+      frasesRecentes: string[]
     }
   }
 }

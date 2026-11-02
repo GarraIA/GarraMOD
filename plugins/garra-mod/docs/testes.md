@@ -29,10 +29,22 @@ Ambiente da validação: Linux, Claude Code **2.1.316**, GarraIA **0.4.10** (gat
 | Tema | `/garra-tema brasil` salvou e aplicou `garra-brasil` no Skins (anterior: gruvbox) e persistiu na sessão seguinte |
 | Abertura e painel num terminal real (pseudo-terminal 150×50) | cartão com estados reais; painel `/garra` acoplado; tecla 2 abre Agentes |
 | Next Steps | após um turno real: "🦜 GarraIA sugere:" com as sugestões e atalhos 1/2/3/0 do próprio Next Steps. Até a 0.1.2, com o Next Steps antes do Garra na lista de plugins, ele ficava por fora na cadeia e o rótulo saía em inglês; desde a 0.1.3 a tradução vem pelo `ui.resolve` e os testes cobrem as duas ordens |
+| Frases de espera | sessões reais num pseudo-terminal com o MOD instalado: veja "Frases de espera (0.1.4)" abaixo |
 | Personalidade | resposta real em pt-BR com a identidade do GarraIA |
 | Delegação sob `--permission-mode bypassPermissions`, sem pessoa (`-p`) | recusada: "NÃO executada: ninguém pôde aprovar"; o Hermes não foi chamado |
 | Delegação sob bypass, sessão interativa | 1) "Aprovar a delegação…?" 2) confirmação de riscos com *Executar com segurança / Executar em modo skip / Cancelar*; com segurança, o Hermes rodou sem `--yolo` e respondeu "OK" |
 | You Should Know | ativo: mostrou um aviso real acima do prompt durante o desenvolvimento |
+
+## Frases de espera (0.1.4)
+
+Antes de implementar, a ordem real da cadeia foi medida numa sessão nova (`claude -p` com um registro temporário de `next.trace` no `turn.start`): o Garra é o último hook dos plugins do usuário, e o Claude Skins e o Next Steps ficam por fora. Com o brilho (`shimmer`) do Skins ligado, o Skins desenha o spinner sozinho e o hook `ui.render` do Garra nunca é chamado; por isso, nesse caso, a frase chega pela lista do `garra-brasil`.
+
+Duas sessões interativas reais num pseudo-terminal 160×50, com o MOD instalado lendo esta pasta:
+
+| Sessão | O que apareceu |
+| --- | --- |
+| Skins ligado (brilho, `garra-brasil`), dois turnos curtos | turno 1 "Fuçando a documentação… <1s", turno 2 "Montando o plano"; ao fim, o Skins ficou com "Botando ordem na casa" para o turno seguinte; paleta do skin intacta |
+| Skins desligado só nessa sessão (`--settings` com `enabledPlugins`), um turno de 30 s | spinner nativo do Claude Code, com animação, tempo, esforço e tokens; a frase trocou a cada ~4 s: Caçando uma boa resposta → Escrevendo com cuidado (4s) → Trocando ideia (8s) → Lapidando o código (12s) → Lendo o código (16s) → Afinando o cavaquinho (20s) → Medindo duas vezes (24s) → Abrindo as asas (30s); depois, "🦜 GarraIA sugere:" no Next Steps |
 
 ## Não validado neste ambiente
 

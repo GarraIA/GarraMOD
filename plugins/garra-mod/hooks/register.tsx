@@ -4,7 +4,7 @@
 // (src/themes), personalidade e textos pt-BR (src/localization).
 
 import { atom, read, update } from 'claude-code'
-import type { Elements, EngineInterface, PluginOptions, Register, RenderElement } from 'claude-code'
+import type { Elements, EngineInterface, PluginOptions, Register, RenderElement, Timer } from 'claude-code'
 import type { GarraAgent, GarraAgentEntry, GarraDiag, GarraDiagItem, GarraExt, GarraHealth, GarraHistoryEntry, GarraMeta, GarraPrefs, GarraSkill, GarraTab } from '../types'
 import { callAgent, type CallOutcome, makeLimiter, type Modo, probeAgent } from '../src/connectors'
 import { detectExts, detectSkills, toolNameSet } from '../src/core/detect'
@@ -13,13 +13,14 @@ import { DEFAULT_PREFS, HISTORY_ANSWER_MAX, HISTORY_MAX, parseHistory, parsePref
 import { healthOf, statusText } from '../src/interface/common'
 import { panel, TABS } from '../src/interface/panel'
 import { welcomeCard } from '../src/interface/welcome'
+import { FRASES_ESPERA, lembrarFrase, sortearFrase } from '../src/localization/frases'
 import { PERSONALIDADE, PERSONALIDADE_ID } from '../src/localization/personalidade'
 import { MARCA, STATUS_ICONE, TXT } from '../src/localization/pt-BR'
 import { defaultLayer, findAgent, mergeAgents, parseAgentFile, validateAgent } from '../src/registry/registry'
 import { oneLine, redactSecrets } from '../src/security/sanitize'
-import { cores, garraSkinDesatualizado, isLightTheme, saveGarraSkin, SKIN_NAME, skinsAvailable, skinsCall, skinsCurrent } from '../src/themes/garra-brasil'
+import { cores, isLightTheme, lerSkinGarra, mesmaLista, salvarFrasesNoSkin, saveGarraSkin, SKIN_NAME, SKIN_SPINNER, skinsAvailable, skinsCall, skinsCurrent } from '../src/themes/garra-brasil'
 
-const VERSION = '0.1.3'
+const VERSION = '0.1.4'
 const PANE = 'garra'
 const PLACE = 'abertura'
 
@@ -63,6 +64,8 @@ export const temaAtom = atom({ plugin: 'garra-mod', key: 'tema' } as const, '')
 export const extsAtom = atom({ plugin: 'garra-mod', key: 'exts' } as const, [] as GarraExt[])
 export const skillsAtom = atom({ plugin: 'garra-mod', key: 'skills' } as const, [] as GarraSkill[])
 export const personaAtom = atom({ plugin: 'garra-mod', key: 'persona' } as const, 0)
+export const fraseAtom = atom({ plugin: 'garra-mod', key: 'frase' } as const, '')
+export const frasesRecentesAtom = atom({ plugin: 'garra-mod', key: 'frasesRecentes' } as const, [] as string[])
 export const metaAtom = atom({ plugin: 'garra-mod', key: 'meta' } as const, {
   claudeVersion: '?',
   idioma: '',
@@ -73,7 +76,16 @@ export const metaAtom = atom({ plugin: 'garra-mod', key: 'meta' } as const, {
 
 
 // Estado do módulo (recomeça a cada recarga; o que precisa durar fica em $.state/$.store).
-const S: { options: PluginOptions; cwd: string; limiter: ReturnType<typeof makeLimiter>; aprovadas: Map<string, number>; logo: string | null } = {
+const S: {
+  options: PluginOptions
+  cwd: string
+  limiter: ReturnType<typeof makeLimiter>
+  aprovadas: Map<string, number>
+  logo: string | null
+  skinAtual: string | null
+  spinnerDoGarra: boolean
+  rodizio: Timer | undefined
+} = {
   options: {},
   cwd: '.',
   limiter: makeLimiter(),
@@ -81,7 +93,17 @@ const S: { options: PluginOptions; cwd: string; limiter: ReturnType<typeof makeL
   aprovadas: new Map(),
   // Logo oficial do GarraRUST (PNG em base64), lido no início da sessão.
   logo: null,
+  // Skin em uso no Claude Skins na última consulta (null: sem Skins ou sem resposta).
+  skinAtual: null,
+  // O spinner já passou pelo hook do Garra nesta sessão (sem um Skins que o desenhe sozinho).
+  spinnerDoGarra: false,
+  // O rodízio das frases durante um turno longo.
+  rodizio: undefined,
 }
+
+// Frases de espera: troca durante turnos longos quando é o Garra quem passa a
+// palavra ao spinner (nunca pelo Skins: cada save dele redesenha o transcript).
+const RODIZIO_MS = 4000
 
 const delegationKey = (input: Record<string, unknown>) => JSON.stringify([str(input.agente), str(input.tarefa), str(input.diretorio)])
 
@@ -156,9 +178,11 @@ async function refreshMeta($: EngineInterface, surface?: string | null) {
 }
 
 async function savePrefs($: EngineInterface, change: (p: GarraPrefs) => GarraPrefs) {
+  const before = await read($, prefsAtom)
   const next = await update($, prefsAtom, p => ({ ...change(p), rev: p.rev + 1 }))
   await $.store.set(STORE.prefs, next)
   await refreshStatus($)
+  if (before.frasesEspera !== next.frasesEspera) $.clock.after(0, () => void sincronizarSkin($))
   return next
 }
 
@@ -239,7 +263,7 @@ async function applyBrasil($: EngineInterface): Promise<string> {
   if (!(await skinsAvailable($))) return TXT.temaSemSkins
   const current = await skinsCurrent($)
   if (current && current.current !== SKIN_NAME) await $.store.set(STORE.previousSkin, current.current)
-  const saved = await saveGarraSkin($, true)
+  const saved = await saveGarraSkin($, true, await listaDoSkin($))
   const msg = saved.ok
     ? `🇧🇷 Tema "${SKIN_NAME}" salvo e aplicado no Claude Skins${current ? ` (antes: ${current.current})` : ''}. /skin ou /garra-tema anterior trocam de volta.`
     : `Não foi possível aplicar o tema: ${oneLine(saved.text, 200)}`
@@ -247,15 +271,57 @@ async function applyBrasil($: EngineInterface): Promise<string> {
   return msg
 }
 
-// Leva as frases atuais do spinner a quem salvou o garra-brasil com uma lista
-// antiga do MOD e não mexeu nela. Sem o Skins, ou com a lista editada, nada muda.
-async function atualizarSkinAntigo($: EngineInterface): Promise<void> {
+// ---------------------------------------------------------------- frases de espera
+
+// Sorteia a próxima frase da coleção, sem repetir nenhuma das últimas 5.
+async function proximaFrase($: EngineInterface): Promise<string> {
+  const frase = sortearFrase(await read($, frasesRecentesAtom), Math.random)
+  await update($, frasesRecentesAtom, recentes => lembrarFrase(recentes, frase))
+  await update($, fraseAtom, () => frase)
+  return frase
+}
+
+// O que a lista do garra-brasil deve ter agora: a frase da vez, ou a lista fixa
+// quando as frases estão desligadas.
+async function listaDoSkin($: EngineInterface): Promise<string[]> {
+  const prefs = await read($, prefsAtom)
+  const frase = await read($, fraseAtom)
+  return prefs.frasesEspera && frase !== '' ? [frase] : [...SKIN_SPINNER]
+}
+
+// Com o Claude Skins desenhando o spinner, a frase chega por ele: o Garra troca
+// só a lista do garra-brasil (uma frase), uma vez por turno, fora do turno.
+// Outro skin em uso ou uma lista que a pessoa editou ficam como estão.
+async function sincronizarSkin($: EngineInterface): Promise<void> {
   try {
-    if (!(await skinsAvailable($)) || !(await garraSkinDesatualizado($))) return
-    const saved = await saveGarraSkin($, true)
-    $.ui.log(saved.ok ? 'tema garra-brasil atualizado com as frases do GarraIA' : `tema garra-brasil não atualizado: ${oneLine(saved.text, 200)}`, { to: 'debug' })
+    if (!(await skinsAvailable($))) {
+      S.skinAtual = null
+      return
+    }
+    const skin = await lerSkinGarra($, FRASES_ESPERA)
+    S.skinAtual = skin?.current ?? null
+    if (!skin?.doMod) return
+    const lista = await listaDoSkin($)
+    if (mesmaLista(skin.spinner, lista)) return
+    const saved = await salvarFrasesNoSkin($, lista)
+    if (!saved.ok) $.ui.log(`frases do garra-brasil não atualizadas: ${oneLine(saved.text, 200)}`, { to: 'debug' })
   } catch (error) {
-    $.ui.log(`tema garra-brasil não atualizado: ${String(error)}`, { to: 'debug' })
+    $.ui.log(`frases do garra-brasil não atualizadas: ${String(error)}`, { to: 'debug' })
+  }
+}
+
+// Um passo do rodízio: só gira quando é o hook do Garra que mostra a frase.
+async function girarFrase($: EngineInterface): Promise<void> {
+  if (S.spinnerDoGarra) await proximaFrase($)
+}
+
+// Fim de um turno: a frase do próximo já fica escolhida (e no Skins, se for ele).
+async function prepararProximoTurno($: EngineInterface): Promise<void> {
+  try {
+    await proximaFrase($)
+    await sincronizarSkin($)
+  } catch (error) {
+    $.ui.log(`frase do próximo turno: ${String(error)}`, { to: 'debug' })
   }
 }
 
@@ -534,8 +600,43 @@ export const register: Register = (on, options) => {
     if (e.isInteractive && prefs.boasVindas) await $.ui.place({ id: PLACE }).catch(() => undefined)
     // A verificação real dos agentes corre num despacho próprio.
     $.clock.after(50, () => void probeAll($))
-    $.clock.after(80, () => void atualizarSkinAntigo($))
+    S.spinnerDoGarra = false
+    await proximaFrase($)
+    $.clock.after(80, () => void sincronizarSkin($))
     return started
+  })
+
+  // ---------------------------------------------------------------- frases de espera
+
+  // Turno longo: a frase gira a cada 4 s enquanto o turno principal roda.
+  on('turn.start', async ($, e, next) => {
+    const started = await next(e)
+    if (e.agentId !== undefined) return started
+    S.rodizio?.cancel()
+    S.rodizio = $.clock.every(RODIZIO_MS, () => void girarFrase($))
+    return started
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    const done = await next(e)
+    if (e.agentId !== undefined) return done
+    S.rodizio?.cancel()
+    S.rodizio = undefined
+    $.clock.after(0, () => void prepararProximoTurno($))
+    return done
+  })
+
+  // Sem um Skins que desenhe o spinner sozinho, a frase chega aqui: o Garra troca
+  // só a palavra e o Claude Code desenha o resto (animação, tempo, tokens). No
+  // desktop a palavra diz o passo em andamento e fica como está; com outro skin
+  // escolhido no Skins, também.
+  on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
+    if (e.surface !== 'terminal') return next(e)
+    if (!(await read($, prefsAtom)).frasesEspera) return next(e)
+    const frase = await read($, fraseAtom)
+    if (frase === '' || (S.skinAtual !== null && S.skinAtual !== SKIN_NAME)) return next(e)
+    S.spinnerDoGarra = true
+    return next({ ...e, props: { ...e.props, word: frase } })
   })
 
   // ---------------------------------------------------------------- personalidade
@@ -704,7 +805,7 @@ export const register: Register = (on, options) => {
     if (arg === 'anterior') return { text: await restoreSkin($) }
     if (!(await skinsAvailable($))) return { text: TXT.temaSemSkins }
     if (arg === 'salvar') {
-      const res = await saveGarraSkin($, false)
+      const res = await saveGarraSkin($, false, await listaDoSkin($))
       return { text: res.ok ? `Tema "${SKIN_NAME}" salvo no Claude Skins (sem aplicar).` : `Falhou: ${oneLine(res.text, 200)}` }
     }
     if (arg !== '') {
@@ -738,12 +839,13 @@ export const register: Register = (on, options) => {
     const [key = '', value = ''] = e.args.trim().split(/\s+/)
     const on_ = (v: string) => ['on', 'sim', 'ligar', 'ligado', 'true', '1'].includes(v.toLowerCase())
     const off = (v: string) => ['off', 'nao', 'não', 'desligar', 'desligado', 'false', '0'].includes(v.toLowerCase())
-    const bools: Record<string, 'personalidade' | 'boasVindas' | 'statusLine' | 'localizarNextSteps'> = {
+    const bools: Record<string, 'personalidade' | 'boasVindas' | 'statusLine' | 'localizarNextSteps' | 'frasesEspera'> = {
       personalidade: 'personalidade',
       'boas-vindas': 'boasVindas',
       abertura: 'boasVindas',
       status: 'statusLine',
       'next-steps': 'localizarNextSteps',
+      frases: 'frasesEspera',
     }
     if (key === 'idioma') return { text: await setLanguage($) }
     const boolKey = bools[key]
@@ -774,7 +876,7 @@ export const register: Register = (on, options) => {
     return {
       text: [
         '⚙️ Preferências do Garra MOD (guardadas entre sessões)',
-        `personalidade ${p.personalidade ? 'on' : 'off'} · boas-vindas ${p.boasVindas ? 'on' : 'off'} · status ${p.statusLine ? 'on' : 'off'} · next-steps ${p.localizarNextSteps ? 'on' : 'off'}`,
+        `personalidade ${p.personalidade ? 'on' : 'off'} · boas-vindas ${p.boasVindas ? 'on' : 'off'} · status ${p.statusLine ? 'on' : 'off'} · next-steps ${p.localizarNextSteps ? 'on' : 'off'} · frases ${p.frasesEspera ? 'on' : 'off'}`,
         `padrao ${p.agentePadrao} · prazo ${p.timeoutS} s (máximo das consultas) · paralelo ${p.concorrencia}`,
         `idioma do Claude Code: ${meta.idioma || 'padrão'}  (/garra-config idioma → português (Brasil))`,
         'Mude com /garra-config <chave> <valor>, ou pelo painel: /garra config. Chaves de API: /config → garra-mod.',

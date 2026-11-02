@@ -4,6 +4,8 @@
 
 import type { On } from 'claude-code'
 import { describe, expect, mock, test } from 'claude-code/testing'
+import { FRASES_ESPERA } from '../src/localization/frases'
+import { SKIN_SPINNER } from '../src/themes/garra-brasil'
 
 const ENABLED = {
   'skins@hellosverre-mods': true,
@@ -17,6 +19,7 @@ type World = {
   cli?: boolean
   sent?: Array<{ server: string; tool: string; args: Record<string, unknown> }>
   store?: Readonly<Record<string, unknown>>
+  skins?: boolean
 }
 
 function ambiente(on: On, world: World = {}) {
@@ -24,7 +27,7 @@ function ambiente(on: On, world: World = {}) {
   mock.env(on, { HOME: '/home/teste' })
   const clock = mock.clock(on, { now: 1_800_000_000_000 })
   const tools = [
-    { name: 'mcp__skins__design', description: '', mcp: true },
+    ...(world.skins === false ? [] : [{ name: 'mcp__skins__design', description: '', mcp: true }]),
     { name: 'mcp__plan-progress__plan_progress', description: '', mcp: true },
     ...(world.mcpUp === false ? [] : [{ name: 'mcp__garraia__garra_ask', description: '', mcp: true }]),
   ]
@@ -558,19 +561,43 @@ describe('interface', () => {
   })
 })
 
+// O Claude Skins falso: responde "show" com o skin em uso e guarda cada "save",
+// atualizando a lista como o Skins de verdade faria.
+function skinsFalso(on: On, inicio: { current: string; spinner: string[] }, saves: Array<Record<string, unknown>>) {
+  const atual = { ...inicio }
+  on('tool.call', { tool: 'mcp__skins__design' }, (_, e) => {
+    const input = e as unknown as Record<string, unknown>
+    if (input.action === 'show') return { result: JSON.stringify({ ...atual, made: ['garra-brasil'] }) } as never
+    saves.push(input)
+    if (Array.isArray(input.spinner)) atual.spinner = input.spinner as string[]
+    return { result: 'salvo' } as never
+  })
+}
+
+// O Claude Code por baixo de tudo: desenha a palavra que chegou até ele.
+function spinnerNativo(on: On) {
+  on('ui.render', { component: 'Spinner' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>{`spinner:${e.props.message ?? e.props.word}`}</Text>
+  })
+  on('turn.start', () => ({ turnId: 'turno' }) as never)
+  on('turn.complete', () => ({ text: 'ok' }) as never)
+}
+
+const INICIO = { text: 'rode os testes', turnId: 'turno-1' }
+const FIM = { turnId: 'turno-1', reason: 'answer', answer: 'feito', text: 'feito', durationMs: 30000, isAborted: false, category: null, explanation: null }
+
+const SPINNER = { component: 'Spinner', requestId: 'spin', props: { word: 'Sauteing', message: null, suffix: '…', mode: 'responding' } }
+
+async function palavra(ui: { find: (q: never) => Promise<{ text?: string } | undefined> }): Promise<string> {
+  const achado = await ui.find({ type: 'Text', text: /^spinner:/ } as never)
+  return (achado?.text ?? '').replace(/^spinner:/, '')
+}
+
 describe('tema garra-brasil', () => {
   const LISTA_ANTIGA = ['Pensando', 'Codando', 'Caprichando', 'Investigando', 'Arquitetando', 'Destrinchando', 'Lapidando', 'Batucando', 'Afinando', 'Garimpando']
 
-  function skinsFalso(on: On, show: { current: string; spinner: string[] }, saves: Array<Record<string, unknown>>) {
-    on('tool.call', { tool: 'mcp__skins__design' }, (_, e) => {
-      const input = e as unknown as Record<string, unknown>
-      if (input.action === 'show') return { result: JSON.stringify({ ...show, made: ['garra-brasil'] }) } as never
-      saves.push(input)
-      return { result: 'salvo' } as never
-    })
-  }
-
-  test('salvo com a lista antiga do MOD, ganha as frases da CLI do GarraIA', async ($, on) => {
+  test('salvo com a lista antiga do MOD, passa a mostrar uma frase sorteada da coleção', async ($, on) => {
     const saves: Array<Record<string, unknown>> = []
     const clock = ambiente(on)
     skinsFalso(on, { current: 'garra-brasil', spinner: LISTA_ANTIGA }, saves)
@@ -578,12 +605,12 @@ describe('tema garra-brasil', () => {
     await clock.advance(200)
     expect(saves.length).toBe(1)
     const spinner = saves[0]?.spinner as string[]
-    expect(spinner).toContain('Afiando as garras')
-    expect(spinner).toContain('Caçando uma boa resposta')
-    expect(spinner).toContain('Farejando bugs')
-    expect(spinner.length).toBeLessThanOrEqual(12)
-    expect(spinner.every(w => w.length >= 1 && w.length <= 24)).toBe(true)
+    expect(spinner.length).toBe(1)
+    expect(FRASES_ESPERA).toContain(spinner[0])
     expect(saves[0]?.name).toBe('garra-brasil')
+    // Só a lista: paleta, base e rótulo ficam como a pessoa deixou.
+    expect(saves[0]?.palette).toBeUndefined()
+    expect(saves[0]?.base).toBeUndefined()
   })
 
   test('lista que a pessoa editou não é trocada', async ($, on) => {
@@ -602,6 +629,122 @@ describe('tema garra-brasil', () => {
     await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
     await clock.advance(200)
     expect(saves.length).toBe(0)
+  })
+})
+
+describe('frases de espera', () => {
+  test('sem o Skins: o Garra troca só a palavra e o Claude Code desenha o spinner', async ($, on) => {
+    const clock = ambiente(on, { skins: false })
+    spinnerNativo(on)
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    await clock.advance(200)
+    const ui = await $.ui.mount({ plugin: 'garra-mod', surface: 'terminal', ...SPINNER } as never)
+    const frase = await palavra(ui as never)
+    expect(FRASES_ESPERA).toContain(frase)
+    await ui.unmount()
+  })
+
+  test('tarefa longa sem o Skins: troca a cada 4 s, sem repetir as últimas 5', async ($, on) => {
+    const clock = ambiente(on, { skins: false })
+    spinnerNativo(on)
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    await clock.advance(200)
+    await $.turn.start(INICIO as never)
+    const ui = await $.ui.mount({ plugin: 'garra-mod', surface: 'terminal', ...SPINNER } as never)
+    const vistas = [await palavra(ui as never)]
+    for (let i = 0; i < 12; i++) {
+      await clock.advance(4000)
+      vistas.push(await palavra(ui as never))
+    }
+    for (const [i, frase] of vistas.entries()) {
+      expect(FRASES_ESPERA).toContain(frase)
+      expect(vistas.slice(Math.max(0, i - 5), i)).not.toContain(frase)
+    }
+    // Fora do turno, a frase para de girar.
+    await $.turn.complete(FIM as never)
+    await clock.advance(200)
+    const parada = await palavra(ui as never)
+    await clock.advance(20000)
+    expect(await palavra(ui as never)).toBe(parada)
+    await ui.unmount()
+  })
+
+  test('com o Skins desenhando o garra-brasil: uma frase nova por turno, sem salvar durante o turno', async ($, on) => {
+    const saves: Array<Record<string, unknown>> = []
+    const clock = ambiente(on)
+    spinnerNativo(on)
+    skinsFalso(on, { current: 'garra-brasil', spinner: SKIN_SPINNER }, saves)
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    await clock.advance(200)
+    expect(saves.length).toBe(1)
+    const frases = [(saves[0]?.spinner as string[])[0]]
+    for (let turno = 0; turno < 6; turno++) {
+      await $.turn.start(INICIO as never)
+      await clock.advance(30000)
+      expect(saves.length).toBe(1 + turno)
+      await $.turn.complete(FIM as never)
+      await clock.advance(200)
+      expect(saves.length).toBe(2 + turno)
+      frases.push((saves.at(-1)?.spinner as string[])[0])
+    }
+    for (const [i, frase] of frases.entries()) {
+      expect(FRASES_ESPERA).toContain(frase)
+      expect(frases.slice(Math.max(0, i - 5), i)).not.toContain(frase)
+    }
+  })
+
+  test('subagentes não trocam a frase do turno principal', async ($, on) => {
+    const saves: Array<Record<string, unknown>> = []
+    const clock = ambiente(on)
+    spinnerNativo(on)
+    skinsFalso(on, { current: 'garra-brasil', spinner: SKIN_SPINNER }, saves)
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    await clock.advance(200)
+    await $.turn.start({ ...INICIO, agentId: 'sub-1' } as never)
+    await $.turn.complete({ ...FIM, agentId: 'sub-1' } as never)
+    await clock.advance(200)
+    expect(saves.length).toBe(1)
+  })
+
+  test('outro skin em uso (Skins sem brilho, passando a palavra dele): o Garra deixa como está', async ($, on) => {
+    const clock = ambiente(on)
+    spinnerNativo(on)
+    skinsFalso(on, { current: 'one-dark', spinner: ['Rolling'] }, [])
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    await clock.advance(200)
+    const ui = await $.ui.mount({ plugin: 'garra-mod', surface: 'terminal', ...SPINNER, props: { ...SPINNER.props, word: 'Rolling' } } as never)
+    expect(await palavra(ui as never)).toBe('Rolling')
+    await ui.unmount()
+  })
+
+  test('no desktop o spinner diz o passo em andamento, e o Garra não troca', async ($, on) => {
+    const clock = ambiente(on, { skins: false })
+    spinnerNativo(on)
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    await clock.advance(200)
+    const ui = await $.ui.mount({ plugin: 'garra-mod', surface: 'desktop', ...SPINNER, props: { ...SPINNER.props, word: 'Creating notes.md' } } as never)
+    expect(await palavra(ui as never)).toBe('Creating notes.md')
+    await ui.unmount()
+  })
+
+  test('/garra-config frases off: spinner do Claude Code e a lista fixa de volta no garra-brasil', async ($, on) => {
+    const saves: Array<Record<string, unknown>> = []
+    const clock = ambiente(on)
+    spinnerNativo(on)
+    skinsFalso(on, { current: 'garra-brasil', spinner: ['Afiando as garras'] }, saves)
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    await clock.advance(200)
+    const out = await $.command.run({ command: 'garra-config', args: 'frases off' } as never)
+    expect(out.text).toContain('frases: desligado')
+    await clock.advance(200)
+    expect(saves.at(-1)?.spinner).toEqual(SKIN_SPINNER)
+    const ui = await $.ui.mount({ plugin: 'garra-mod', surface: 'terminal', ...SPINNER } as never)
+    expect(await palavra(ui as never)).toBe('Sauteing')
+    await ui.unmount()
+    await $.turn.start(INICIO as never)
+    await $.turn.complete(FIM as never)
+    await clock.advance(200)
+    expect(saves.at(-1)?.spinner).toEqual(SKIN_SPINNER)
   })
 })
 
