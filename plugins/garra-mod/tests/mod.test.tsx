@@ -14,6 +14,21 @@ const ENABLED = {
   'cc-plugin-you-should-know@builtin': true,
 }
 
+// Um config.yml do GarraIA (chave falsa, montada por partes). Sem provedor e
+// modelo, o `garra mcp-server` usaria o padrão embutido (z-ai/glm-5.3-flash).
+const CHAVE_FALSA = ['sk', 'or', 'v1', 'q'.repeat(30)].join('-')
+const CONFIG_GARRAIA = [
+  'llm:',
+  '  openrouter:',
+  '    provider: openrouter',
+  '    model: anthropic/claude-haiku-5.5',
+  `    api_key: ${CHAVE_FALSA}`,
+  '    base_url: https://openrouter.ai/api/v1',
+  'agent:',
+  '  default_provider: openrouter',
+].join('\n')
+const COM_CONFIG = { '/home/teste/.config/garraia/config.yml': CONFIG_GARRAIA }
+
 type World = {
   mcpUp?: boolean
   cli?: boolean
@@ -74,6 +89,23 @@ describe('carga e comandos', () => {
     expect(out.text).toContain('Extensões')
   })
 
+  test('/garra-status mostra o provedor e o modelo que o MOD passa ao GarraIA, lidos do config.yml', async ($, on) => {
+    ambiente(on, { files: COM_CONFIG })
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const out = await $.command.run({ command: 'garra-status', args: '' } as never)
+    expect(out.text).toContain('🦜 Modelo que o MOD passa ao GarraIA (MCP, consulta e delegação): openrouter · anthropic/claude-haiku-5.5 — lido do config.yml do GarraIA (~/.config/garraia/config.yml)')
+    // O Hermes não é chamado por MCP: o modelo fica por conta dele.
+    expect(out.text).not.toContain('passa ao Hermes')
+    expect(out.text).not.toContain(CHAVE_FALSA)
+  })
+
+  test('/garra-status sem config.yml do GarraIA diz que nada é passado e qual padrão vale', async ($, on) => {
+    ambiente(on)
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const out = await $.command.run({ command: 'garra-status', args: '' } as never)
+    expect(out.text).toContain('Modelo que o MOD passa ao GarraIA (MCP, consulta e delegação): nenhum — config.yml do GarraIA não encontrado; vale o padrão do servidor MCP do GarraIA (hoje z-ai/glm-5.3-flash)')
+  })
+
   test('a personalidade entra no prompt de sistema', async ($, on) => {
     ambiente(on)
     on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'base', scope: 'shared' as const }] }))
@@ -130,23 +162,9 @@ describe('ponte multiagente', () => {
     expect(text).toContain('removidos antes do envio')
   })
 
-  // Sem provedor e modelo, o `garra mcp-server` usa o padrão embutido dele
-  // (z-ai/glm-5.3-flash), não o que a pessoa configurou no GarraIA.
-  const CHAVE_FALSA = ['sk', 'or', 'v1', 'q'.repeat(30)].join('-')
-  const CONFIG_GARRAIA = [
-    'llm:',
-    '  openrouter:',
-    '    provider: openrouter',
-    '    model: anthropic/claude-haiku-5.5',
-    `    api_key: ${CHAVE_FALSA}`,
-    '    base_url: https://openrouter.ai/api/v1',
-    'agent:',
-    '  default_provider: openrouter',
-  ].join('\n')
-
   test('consulta e delegação ao GarraIA levam o provedor e o modelo do config.yml dele', async ($, on) => {
     const sent: World['sent'] = []
-    ambiente(on, { sent, files: { '/home/teste/.config/garraia/config.yml': CONFIG_GARRAIA } })
+    ambiente(on, { sent, files: COM_CONFIG })
     on('tool.call', { tool: 'AskUserQuestion' }, (_, e) => {
       const qs = (e as unknown as { questions: Array<{ question: string }> }).questions
       const q = qs[0]?.question ?? ''
@@ -550,6 +568,18 @@ describe('interface', () => {
       await ui.press({ key: 'tab-info' })
       await ui.unmount()
     }
+  })
+
+  test('painel /garra → Modelos mostra o que o MOD passa ao GarraIA e de onde veio', async ($, on) => {
+    ambiente(on, { files: COM_CONFIG })
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'garra-mod', surface: 'terminal', component: 'Pane', requestId: 'garra', props: { title: 'Garra', isFocused: true, bodyColumns: 90, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } } as never)
+    await ui.press({ key: 'tab-modelos' })
+    expect(await ui.find({ type: 'Text', text: 'o MOD passa (consulta e delegação): openrouter · anthropic/claude-haiku-5.5' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'lido do config.yml do GarraIA (~/.config/garraia/config.yml)' })).toBeDefined()
+    // O Hermes segue com o modelo decidido por ele.
+    expect(await ui.find({ type: 'Text', text: /configurado pelo próprio agente/ })).toBeDefined()
+    await ui.unmount()
   })
 
   test('Next Steps por dentro do Garra: "next:" em pt-BR e o resto intacto', {

@@ -2,6 +2,7 @@
 // Tudo o que aparece vem do estado real; as ações chamam os handlers do MOD.
 
 import type { GarraAgentEntry, GarraDiag, GarraHealth, GarraHistoryEntry, GarraPrefs, GarraTab, GarraTransport } from '../../types'
+import type { ModeloPassado } from '../connectors/garraia-config'
 import { MARCA, SLOGAN } from '../localization/pt-BR'
 import { oneLine } from '../security/sanitize'
 import type { Cores } from '../themes/garra-brasil'
@@ -38,6 +39,8 @@ export type PanelData = {
   tema: string
   idioma: string
   columns: number
+  // Seção Modelos: o que o MOD passa no `provider`/`model` das chamadas MCP, por agente.
+  modelos: Readonly<Record<string, ReadonlyArray<{ rotulo: string } & ModeloPassado>>>
 }
 
 export type PanelActions = {
@@ -162,11 +165,20 @@ export function panel(ui: UI, d: PanelData, act: PanelActions) {
           <Box flexDirection="column">
             {d.agents.filter(a => a.tipo !== 'principal').map(agent => {
               const seen = [...d.history].reverse().find(e => e.agente === agent.id && e.modelo)
+              const passa = d.modelos[agent.id] ?? []
               return (
-                <Text>
-                  {agent.icone ?? '•'} <Text weight="bold" color={c.texto}>{agent.nome}</Text>
-                  <Text color={c.fraco}>: configurado {agent.modelo ?? 'pelo próprio agente'}; último observado {seen?.modelo ?? '—'}</Text>
-                </Text>
+                <Box flexDirection="column">
+                  <Text>
+                    {agent.icone ?? '•'} <Text weight="bold" color={c.texto}>{agent.nome}</Text>
+                    <Text color={c.fraco}>: {passa.length > 0 ? '' : `configurado ${agent.modelo ?? 'pelo próprio agente'}; `}último observado {seen?.modelo ?? '—'}</Text>
+                  </Text>
+                  {passa.map(l => (
+                    <Box flexDirection="column" marginLeft={3}>
+                      <Text color={c.texto}>o MOD passa ({l.rotulo}): {l.valor}</Text>
+                      <Text color={c.fraco}>{l.fonte}</Text>
+                    </Box>
+                  ))}
+                </Box>
               )
             })}
             <Text color={c.fraco}>O modelo de cada agente externo é decidido pela configuração dele (garra config, hermes model). O Garra MOD não troca o modelo do Claude Code.</Text>

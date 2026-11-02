@@ -2,6 +2,7 @@
 
 import type { GarraAgentEntry, GarraExt, GarraHealth, GarraPrefs } from '../../types'
 import type { CallOutcome, Modo } from '../connectors'
+import type { ModeloPassado } from '../connectors/garraia-config'
 import { MARCA, TXT } from '../localization/pt-BR'
 import { extsActive, healthOf, seconds, statusIcon, statusText } from '../interface/common'
 
@@ -44,6 +45,12 @@ export function formatExts(exts: readonly GarraExt[]): string {
   return `🧩 Extensões: ${TXT.extensoes(extsActive(exts), exts.length)}\n${lines.join('\n')}`
 }
 
+export function formatModelos(modelos: ReadonlyArray<{ agent: GarraAgentEntry; linhas: ReadonlyArray<{ rotulo: string } & ModeloPassado> }>): string[] {
+  return modelos.flatMap(({ agent, linhas }) =>
+    linhas.map(l => `${agent.icone ?? '🤖'} Modelo que o MOD passa ao ${agent.nome} (MCP, ${l.rotulo}): ${l.valor} — ${l.fonte}`),
+  )
+}
+
 export function formatStatus(d: {
   version: string
   claudeVersion: string
@@ -52,12 +59,15 @@ export function formatStatus(d: {
   prefs: GarraPrefs
   exts: readonly GarraExt[]
   historico: number
+  // O que o MOD passa no `provider`/`model` das chamadas MCP de cada agente.
+  modelos?: ReadonlyArray<{ agent: GarraAgentEntry; linhas: ReadonlyArray<{ rotulo: string } & ModeloPassado> }>
 }): string {
   return [
     `${MARCA} · v${d.version} · Claude Code ${d.claudeVersion}`,
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     TXT.modAtivo,
     formatAgents(d.agents, d.health, d.prefs),
+    ...formatModelos(d.modelos ?? []),
     formatExts(d.exts),
     `⚙️ Personalidade ${d.prefs.personalidade ? 'ligada' : 'desligada'} · prazo ${d.prefs.timeoutS} s · ${d.prefs.concorrencia} consultas paralelas · ${d.historico} conversas no histórico`,
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',

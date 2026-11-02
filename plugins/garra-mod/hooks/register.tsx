@@ -7,6 +7,7 @@ import { atom, read, update } from 'claude-code'
 import type { Elements, EngineInterface, PluginOptions, Register, RenderElement, Timer } from 'claude-code'
 import type { GarraAgent, GarraAgentEntry, GarraDiag, GarraDiagItem, GarraExt, GarraHealth, GarraHistoryEntry, GarraMeta, GarraPrefs, GarraSkill, GarraTab } from '../types'
 import { callAgent, type CallOutcome, makeLimiter, type Modo, probeAgent } from '../src/connectors'
+import { lerConfigGarraIA, linhasModelo, type ModeloPassado } from '../src/connectors/garraia-config'
 import { detectExts, detectSkills, toolNameSet } from '../src/core/detect'
 import { formatAgents, formatExts, formatOutcome, formatStatus } from '../src/core/format'
 import { DEFAULT_PREFS, HISTORY_ANSWER_MAX, HISTORY_MAX, parseHistory, parsePrefs, STORE } from '../src/core/state'
@@ -20,7 +21,7 @@ import { defaultLayer, findAgent, mergeAgents, parseAgentFile, validateAgent } f
 import { oneLine, redactSecrets } from '../src/security/sanitize'
 import { cores, isLightTheme, lerSkinGarra, mesmaLista, salvarFrasesNoSkin, saveGarraSkin, SKIN_NAME, SKIN_SPINNER, skinsAvailable, skinsCall, skinsCurrent } from '../src/themes/garra-brasil'
 
-const VERSION = '0.1.6'
+const VERSION = '0.1.7'
 const PANE = 'garra'
 const PLACE = 'abertura'
 
@@ -421,7 +422,30 @@ async function statusText_($: EngineInterface) {
     read($, metaAtom),
     read($, historyAtom),
   ])
-  return formatStatus({ version: VERSION, claudeVersion: meta.claudeVersion, agents, health, prefs, exts, historico: history.length })
+  const modelos = await modelosPorAgente($, agents)
+  return formatStatus({
+    version: VERSION,
+    claudeVersion: meta.claudeVersion,
+    agents,
+    health,
+    prefs,
+    exts,
+    historico: history.length,
+    modelos: agents.filter(a => (modelos[a.id] ?? []).length > 0).map(agent => ({ agent, linhas: modelos[agent.id] ?? [] })),
+  })
+}
+
+// Provedor e modelo que o MOD vai passar a cada agente chamado por MCP,
+// relidos do config.yml do GarraIA na hora (o mesmo que a chamada usa).
+async function modelosPorAgente($: EngineInterface, agents: readonly GarraAgentEntry[]): Promise<Record<string, Array<{ rotulo: string } & ModeloPassado>>> {
+  const leitura = await lerConfigGarraIA($)
+  const out: Record<string, Array<{ rotulo: string } & ModeloPassado>> = {}
+  for (const agent of agents) {
+    if (agent.tipo === 'principal') continue
+    const linhas = linhasModelo(agent, leitura)
+    if (linhas.length > 0) out[agent.id] = linhas
+  }
+  return out
 }
 
 
@@ -955,9 +979,11 @@ export const register: Register = (on, options) => {
       read($, metaAtom),
     ])
     const ui = $.ui.resolve(e)
+    // Só na seção Modelos: relê o config.yml do GarraIA a cada desenho dela.
+    const modelos = tab === 'modelos' ? await modelosPorAgente($, agents) : {}
     return panel(
       ui,
-      { cores: cores(meta.isLight), tab, version: VERSION, claudeVersion: meta.claudeVersion, agents, health, history, running, prefs, diag, exts, skills, tema, idioma: meta.idioma, columns: e.props.bodyColumns },
+      { cores: cores(meta.isLight), tab, version: VERSION, claudeVersion: meta.claudeVersion, agents, health, history, running, prefs, diag, exts, skills, tema, idioma: meta.idioma, columns: e.props.bodyColumns, modelos },
       {
         tab: (t: GarraTab) => update($, tabAtom, () => t),
         probe: () => probeAll($),

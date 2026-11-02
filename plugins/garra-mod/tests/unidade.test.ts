@@ -6,7 +6,7 @@ import { parseChatCompletion, parseEnvelope } from '../src/connectors/parse'
 import { findAgent, mergeAgents, parseAgentFile, validateAgent, defaultLayer } from '../src/registry/registry'
 import { checkDestination, cleanOutput, redactSecrets } from '../src/security/sanitize'
 import { FRASES_ESPERA, lembrarFrase, SEM_REPETIR, sortearFrase } from '../src/localization/frases'
-import { modeloDoConfig, pastasDoGarraIA } from '../src/connectors/garraia-config'
+import { linhasModelo, modeloDoConfig, modeloPassado, pastasDoGarraIA, type LeituraGarraIA } from '../src/connectors/garraia-config'
 
 // Valores FALSOS, montados por partes para nenhum scanner de segredos os
 // confundir com chaves reais. Têm o formato que o MOD precisa remover.
@@ -199,5 +199,35 @@ describe('modelo do config do GarraIA', () => {
     expect(pastasDoGarraIA({ HOME: '/home/a', GARRAIA_CONFIG_DIR: '/cfg', XDG_CONFIG_HOME: '/xdg' }).slice(0, 2)).toEqual(['/cfg', '/xdg/garraia'])
     expect(pastasDoGarraIA({ USERPROFILE: 'C:/Users/a', APPDATA: 'C:/Users/a/AppData/Roaming' })).toContain('C:/Users/a/AppData/Roaming/garraia')
     expect(pastasDoGarraIA({})).toEqual([])
+  })
+})
+
+describe('resumo do modelo que o MOD passa', () => {
+  const LIDO: LeituraGarraIA = { modelo: { provider: 'openrouter', model: 'anthropic/claude-haiku-5.5' }, caminho: '~/.config/garraia/config.yml', motivo: '' }
+  const SEM: LeituraGarraIA = { modelo: null, caminho: null, motivo: 'config.yml do GarraIA não encontrado' }
+  const mcp = (args: Record<string, string>) => ({ type: 'mcp' as const, server: 'garraia', tool: 'garra_ask', messageArg: 'message', args })
+  const garraia = () => {
+    const a = findAgent(mergeAgents([defaultLayer()]), 'garraia')
+    if (!a) throw new Error('sem garraia')
+    return a
+  }
+
+  test('marcadores com config: o valor lido e o arquivo de onde veio', () => {
+    expect(modeloPassado(mcp({ provider: '{garraia.provider}', model: '{garraia.model}' }), LIDO)).toEqual({ valor: 'openrouter · anthropic/claude-haiku-5.5', fonte: 'lido do config.yml do GarraIA (~/.config/garraia/config.yml)' })
+  })
+
+  test('marcadores sem config, modelo fixo, nenhum modelo e transporte que não é MCP', () => {
+    expect(modeloPassado(mcp({ model: '{garraia.model}' }), SEM)).toEqual({ valor: 'nenhum', fonte: 'config.yml do GarraIA não encontrado; vale o padrão do servidor MCP do GarraIA (hoje z-ai/glm-5.3-flash)' })
+    expect(modeloPassado(mcp({ model: 'anthropic/claude-haiku-5.5' }), LIDO)).toEqual({ valor: 'anthropic/claude-haiku-5.5', fonte: 'fixo na definição do agente' })
+    expect(modeloPassado(mcp({ timeout_secs: '{timeout}' }), LIDO)?.valor).toBe('nenhum')
+    expect(modeloPassado({ type: 'process', argv: ['garra', 'ask'] }, LIDO)).toBeNull()
+  })
+
+  test('consulta e delegação iguais viram uma linha; diferentes, duas; sem MCP, nenhuma', () => {
+    expect(linhasModelo(garraia(), LIDO)).toEqual([{ rotulo: 'consulta e delegação', valor: 'openrouter · anthropic/claude-haiku-5.5', fonte: 'lido do config.yml do GarraIA (~/.config/garraia/config.yml)' }])
+    const misto = { ...garraia(), delegar: [mcp({ model: 'outro/modelo' })] }
+    expect(linhasModelo(misto, LIDO).map(l => l.rotulo)).toEqual(['consulta', 'delegação'])
+    const hermes = findAgent(mergeAgents([defaultLayer()]), 'hermes')
+    expect(hermes ? linhasModelo(hermes, LIDO) : null).toEqual([])
   })
 })
