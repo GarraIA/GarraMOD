@@ -6,6 +6,7 @@ import { parseChatCompletion, parseEnvelope } from '../src/connectors/parse'
 import { findAgent, mergeAgents, parseAgentFile, validateAgent, defaultLayer } from '../src/registry/registry'
 import { checkDestination, cleanOutput, redactSecrets } from '../src/security/sanitize'
 import { FRASES_ESPERA, lembrarFrase, SEM_REPETIR, sortearFrase } from '../src/localization/frases'
+import { modeloDoConfig, pastasDoGarraIA } from '../src/connectors/garraia-config'
 
 // Valores FALSOS, montados por partes para nenhum scanner de segredos os
 // confundir com chaves reais. Têm o formato que o MOD precisa remover.
@@ -141,5 +142,62 @@ describe('frases de espera', () => {
     expect(FRASES_ESPERA).toContain(sortearFrase([], () => 0.9999999))
     expect(FRASES_ESPERA).toContain(sortearFrase([], () => 0))
     expect(sortearFrase(['x', 'y'], () => 0.5, ['x', 'y'])).toMatch(/^[xy]$/)
+  })
+})
+
+describe('modelo do config do GarraIA', () => {
+  // Parecido com o config.yml real: chaves, apelidos em llm:, comentários,
+  // texto em bloco e listas. Só o provedor padrão e o modelo dele podem sair.
+  const CONFIG = [
+    'gateway:',
+    '  port: 3888',
+    `  api_key: ${FALSO.sk}`,
+    'llm:',
+    '  openrouter:',
+    '    provider: openrouter',
+    '    model: anthropic/claude-haiku-5.5',
+    `    api_key: ${FALSO.openrouter}`,
+    '    base_url: https://openrouter.ai/api/v1',
+    '  ollama-qwen3:',
+    '    provider: openai',
+    "    model: 'qwen3.5:0.8b'  # local",
+    '    base_url: http://127.0.0.1:11434/v1',
+    'agent:',
+    '  system_prompt: |',
+    '    default_provider: ollama-qwen3',
+    '    model: nao-e-este',
+    '  persona: friendly',
+    '  default_provider: openrouter  # principal',
+    '  fallback_providers:',
+    '  - ollama-qwen3',
+    'timeouts:',
+    '  llm:',
+    '    default_secs: 120',
+  ].join('\n')
+
+  test('lê o provedor padrão e o modelo dele, e nada mais', () => {
+    expect(modeloDoConfig(CONFIG)).toEqual({ provider: 'openrouter', model: 'anthropic/claude-haiku-5.5' })
+  })
+
+  test('apelido de llm: como provedor padrão, com aspas e comentário', () => {
+    const alias = CONFIG.replace('default_provider: openrouter  # principal', 'default_provider: "ollama-qwen3"')
+    expect(modeloDoConfig(alias)).toEqual({ provider: 'ollama-qwen3', model: 'qwen3.5:0.8b' })
+  })
+
+  test('sem dado confiável, não inventa nada', () => {
+    expect(modeloDoConfig(CONFIG.replace('  default_provider: openrouter  # principal\n', ''))).toBeNull()
+    expect(modeloDoConfig(CONFIG.replace('default_provider: openrouter', 'default_provider: inexistente'))).toBeNull()
+    expect(modeloDoConfig(CONFIG.replace('    model: anthropic/claude-haiku-5.5\n', ''))).toBeNull()
+    expect(modeloDoConfig(CONFIG.replace('model: anthropic/claude-haiku-5.5', 'model: null'))).toBeNull()
+    expect(modeloDoConfig(CONFIG.replace('model: anthropic/claude-haiku-5.5', 'model: "x; rm -rf ~"'))).toBeNull()
+    expect(modeloDoConfig('llm: {openrouter: {model: x}}\nagent: {default_provider: openrouter}')).toBeNull()
+    expect(modeloDoConfig('')).toBeNull()
+  })
+
+  test('procura nas pastas do GarraIA, na ordem dele', () => {
+    expect(pastasDoGarraIA({ HOME: '/home/a' })).toEqual(['/home/a/.config/garraia', '/home/a/Library/Application Support/garraia', '/home/a/.garraia'])
+    expect(pastasDoGarraIA({ HOME: '/home/a', GARRAIA_CONFIG_DIR: '/cfg', XDG_CONFIG_HOME: '/xdg' }).slice(0, 2)).toEqual(['/cfg', '/xdg/garraia'])
+    expect(pastasDoGarraIA({ USERPROFILE: 'C:/Users/a', APPDATA: 'C:/Users/a/AppData/Roaming' })).toContain('C:/Users/a/AppData/Roaming/garraia')
+    expect(pastasDoGarraIA({})).toEqual([])
   })
 })

@@ -51,6 +51,14 @@ Nenhuma camada exige mexer no código do MOD. O `claude` (agente principal) não
 
 Usa `$.mcp.call` com a conexão e as credenciais do próprio Claude Code. Se o servidor não estiver conectado, passa a vez ao próximo transporte.
 
+Nos `args`, `{timeout}` e `{cwd}` são substituídos. Para o GarraIA, `{garraia.provider}` e `{garraia.model}` viram o provedor padrão (`agent.default_provider`) e o modelo dessa entrada em `llm:` do `config.yml` do GarraIA, lido a cada chamada nas pastas que o próprio GarraIA usa (`GARRAIA_CONFIG_DIR`, `~/.config/garraia`, `~/.garraia`). Se o arquivo não existir ou não tiver esses campos, o argumento fica de fora e vale o padrão do servidor (`z-ai/glm-5.3-flash`). É assim que o agente padrão chama o GarraIA:
+
+```json
+{ "type": "mcp", "server": "garraia", "tool": "garra_ask", "messageArg": "message", "args": { "timeout_secs": "{timeout}", "provider": "{garraia.provider}", "model": "{garraia.model}" }, "output": "garra.ask.v1" }
+```
+
+Esses dois marcadores valem só nos `args` de MCP. A CLI (`garra ask` sem `-p`/`-m`) já segue o `agent.default_provider` sozinha.
+
 ### `process` — executável local
 
 ```json

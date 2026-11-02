@@ -31,13 +31,16 @@ export const DEFAULT_AGENTS: readonly GarraAgent[] = [
     permissoes: { consulta: true, delegar: true },
     consulta: [
       // Servidor MCP `garra mcp-server` (ferramenta garra_ask: só LLM, sem shell).
-      { type: 'mcp', server: 'garraia', tool: 'garra_ask', messageArg: 'message', args: { timeout_secs: '{timeout}' }, output: 'garra.ask.v1' },
-      // Mesma consulta pela CLI, para máquinas sem o servidor MCP configurado.
+      // Provedor e modelo vêm do config.yml do GarraIA; sem eles o servidor usaria
+      // o padrão embutido (z-ai/glm-5.3-flash). Sem config legível, ficam de fora.
+      { type: 'mcp', server: 'garraia', tool: 'garra_ask', messageArg: 'message', args: { timeout_secs: '{timeout}', provider: '{garraia.provider}', model: '{garraia.model}' }, output: 'garra.ask.v1' },
+      // Mesma consulta pela CLI, para máquinas sem o servidor MCP configurado
+      // (`garra ask` sem -p/-m já segue o agent.default_provider do config).
       { type: 'process', argv: ['garra', 'ask', '--json', '--timeout-secs', '{timeout}'], output: 'garra.ask.v1' },
     ],
     delegar: [
       // garra_agent: agente completo com shell, arquivos, git e web. Com aprovação (exceto no modo bypass).
-      { type: 'mcp', server: 'garraia', tool: 'garra_agent', messageArg: 'message', args: { timeout_secs: '{timeout}', working_dir: '{cwd}' }, output: 'garra.agent.v1' },
+      { type: 'mcp', server: 'garraia', tool: 'garra_agent', messageArg: 'message', args: { timeout_secs: '{timeout}', working_dir: '{cwd}', provider: '{garraia.provider}', model: '{garraia.model}' }, output: 'garra.agent.v1' },
     ],
     sessao: { compartilharHistorico: false, maxEntradaKB: 60 },
     ativo: true,

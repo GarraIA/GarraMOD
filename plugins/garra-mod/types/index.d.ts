@@ -25,6 +25,8 @@ export type GarraTransport =
       // Nome do argumento que recebe a mensagem.
       messageArg: string
       // Argumentos extras; `{timeout}` e `{cwd}` são substituídos.
+      // `{garraia.provider}` e `{garraia.model}` viram o provedor e o modelo do
+      // config.yml do GarraIA; sem config legível, o argumento fica de fora.
       args?: Record<string, string | number | boolean>
       output?: GarraOutput
     }

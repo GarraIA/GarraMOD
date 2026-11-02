@@ -20,6 +20,8 @@ type World = {
   sent?: Array<{ server: string; tool: string; args: Record<string, unknown> }>
   store?: Readonly<Record<string, unknown>>
   skins?: boolean
+  // Arquivos que o MOD enxerga ($.fs.exists/read); o resto não existe.
+  files?: Readonly<Record<string, string>>
 }
 
 function ambiente(on: On, world: World = {}) {
@@ -39,7 +41,9 @@ function ambiente(on: On, world: World = {}) {
   on('settings.read', () => ({ value: { enabledPlugins: ENABLED, theme: 'dark' } }))
   on('session.version', () => ({ value: { version: '2.1.316' } }))
   on('config.list', () => ({ value: [] }))
-  on('fs.exists', () => ({ value: false }))
+  const files = world.files ?? {}
+  on('fs.exists', (_, e) => ({ value: Object.keys(files).some(f => f === e.path || f.startsWith(`${e.path}/`)) }))
+  on('fs.read', (_, e, next) => (e.path in files ? { value: files[e.path] ?? '' } : next(e)))
   on('ui.place', () => ({ value: { isPlaced: true, requestId: 'abertura-1' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.status', () => ({ value: undefined }))
@@ -124,6 +128,50 @@ describe('ponte multiagente', () => {
     expect(sent[0]?.server).toBe('garraia')
     expect(String(sent[0]?.args.message)).not.toContain('abcdefghijklmnop')
     expect(text).toContain('removidos antes do envio')
+  })
+
+  // Sem provedor e modelo, o `garra mcp-server` usa o padrão embutido dele
+  // (z-ai/glm-5.3-flash), não o que a pessoa configurou no GarraIA.
+  const CHAVE_FALSA = ['sk', 'or', 'v1', 'q'.repeat(30)].join('-')
+  const CONFIG_GARRAIA = [
+    'llm:',
+    '  openrouter:',
+    '    provider: openrouter',
+    '    model: anthropic/claude-haiku-5.5',
+    `    api_key: ${CHAVE_FALSA}`,
+    '    base_url: https://openrouter.ai/api/v1',
+    'agent:',
+    '  default_provider: openrouter',
+  ].join('\n')
+
+  test('consulta e delegação ao GarraIA levam o provedor e o modelo do config.yml dele', async ($, on) => {
+    const sent: World['sent'] = []
+    ambiente(on, { sent, files: { '/home/teste/.config/garraia/config.yml': CONFIG_GARRAIA } })
+    on('tool.call', { tool: 'AskUserQuestion' }, (_, e) => {
+      const qs = (e as unknown as { questions: Array<{ question: string }> }).questions
+      const q = qs[0]?.question ?? ''
+      return { result: { questions: qs, answers: { [q]: q.startsWith('Aprovar') ? 'Aprovar' : 'Executar com segurança' } } } as never
+    })
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    await $.tool.call({ tool: 'mcp__garra-mod__garra_consultar', agente: 'garraia', pergunta: 'oi' } as never)
+    await $.tool.call({ tool: 'mcp__garra-mod__garra_delegar', agente: 'garraia', tarefa: 'liste os arquivos' } as never)
+    expect(sent.map(s => s.tool)).toEqual(['garra_ask', 'garra_agent'])
+    for (const s of sent) {
+      expect(s.args.provider).toBe('openrouter')
+      expect(s.args.model).toBe('anthropic/claude-haiku-5.5')
+    }
+    expect(sent[1]?.args.working_dir).toBe('/projeto')
+    // Do config, só o provedor e o modelo saem; a chave nunca.
+    expect(JSON.stringify(sent)).not.toContain(CHAVE_FALSA)
+  })
+
+  test('sem config.yml do GarraIA, provedor e modelo ficam de fora e vale o padrão dele', async ($, on) => {
+    const sent: World['sent'] = []
+    ambiente(on, { sent })
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    await $.tool.call({ tool: 'mcp__garra-mod__garra_consultar', agente: 'garraia', pergunta: 'oi' } as never)
+    expect(sent.length).toBe(1)
+    expect(Object.keys(sent[0]?.args ?? {}).sort()).toEqual(['message', 'timeout_secs'])
   })
 
   test('sem o servidor MCP, o GarraIA responde pela CLI (fallback real de transporte)', async ($, on) => {

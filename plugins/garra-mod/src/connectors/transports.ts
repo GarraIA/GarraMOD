@@ -10,6 +10,7 @@ import type { EngineInterface, PluginOptions } from 'claude-code'
 import type { GarraAuth, GarraTransport } from '../../types'
 import { TXT } from '../localization/pt-BR'
 import { checkDestination, cleanOutput, oneLine } from '../security/sanitize'
+import type { ModeloGarraIA } from './garraia-config'
 import { mcpText, parseChatCompletion, parseEnvelope } from './parse'
 
 export type TransportCtx = {
@@ -18,6 +19,8 @@ export type TransportCtx = {
   cwd: string
   // Modo skip nesta delegação: escolha da pessoa ou Claude Code em modo bypass (nunca do modelo).
   skip?: boolean
+  // Provedor e modelo do config.yml do GarraIA (`{garraia.provider}`/`{garraia.model}`).
+  garraia?: ModeloGarraIA | null
 }
 
 export type TransportResult =
@@ -45,9 +48,24 @@ function fill(value: string, ctx: TransportCtx): string {
   return value.replaceAll('{timeout}', String(ctx.timeoutS)).replaceAll('{cwd}', ctx.cwd)
 }
 
-function fillArg(value: string | number | boolean, ctx: TransportCtx): string | number | boolean {
+const GARRAIA_ARG = /\{garraia\.(provider|model)\}/g
+
+// Algum argumento MCP pede o provedor ou o modelo do GarraIA?
+export function usaModeloGarraIA(t: GarraTransport): boolean {
+  return t.type === 'mcp' && Object.values(t.args ?? {}).some(v => typeof v === 'string' && /\{garraia\.(provider|model)\}/.test(v))
+}
+
+// `undefined`: o argumento fica de fora (sem config do GarraIA, vale o padrão dele).
+function fillArg(value: string | number | boolean, ctx: TransportCtx): string | number | boolean | undefined {
   if (value === '{timeout}') return ctx.timeoutS
-  return typeof value === 'string' ? fill(value, ctx) : value
+  if (typeof value !== 'string') return value
+  let falta = false
+  const out = fill(value, ctx).replace(GARRAIA_ARG, (_, campo: 'provider' | 'model') => {
+    const v = ctx.garraia?.[campo]
+    if (!v) falta = true
+    return v ?? ''
+  })
+  return falta ? undefined : out
 }
 
 export function mcpToolName(server: string, tool: string): string {
@@ -85,7 +103,10 @@ export async function resolveAuth($: EngineInterface, ctx: TransportCtx, auth: G
 async function runMcp($: EngineInterface, ctx: TransportCtx, t: Extract<GarraTransport, { type: 'mcp' }>, message: string): Promise<TransportResult> {
   const via = `MCP ${t.server}/${t.tool}`
   const args: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(t.args ?? {})) args[key] = fillArg(value, ctx)
+  for (const [key, value] of Object.entries(t.args ?? {})) {
+    const filled = fillArg(value, ctx)
+    if (filled !== undefined) args[key] = filled
+  }
   args[t.messageArg] = message
   // Margem: o servidor tem o próprio prazo e responde o erro dele.
   const limit = deadline($, (ctx.timeoutS + 15) * 1000)

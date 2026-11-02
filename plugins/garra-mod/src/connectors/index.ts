@@ -5,7 +5,8 @@ import type { EngineInterface, PluginOptions } from 'claude-code'
 import type { GarraAgentEntry, GarraHealth } from '../../types'
 import { TXT } from '../localization/pt-BR'
 import { redactSecrets } from '../security/sanitize'
-import { probeTransport, runTransport, type TransportCtx } from './transports'
+import { lerModeloGarraIA } from './garraia-config'
+import { probeTransport, runTransport, usaModeloGarraIA, type TransportCtx } from './transports'
 
 export type Modo = 'consulta' | 'delegar'
 
@@ -49,11 +50,14 @@ export async function callAgent($: EngineInterface, options: PluginOptions, req:
   const bytes = new TextEncoder().encode(mensagem).length
   if (bytes > agent.sessao.maxEntradaKB * 1024) return fail(TXT.entradaGrande(agent.sessao.maxEntradaKB), redacoes)
 
+  // Lido a cada chamada: uma troca com `garra config set-model` vale na hora.
+  const garraia = chain.some(usaModeloGarraIA) ? await lerModeloGarraIA($) : null
   const ctx: TransportCtx = {
     options,
     cwd: req.cwd,
     timeoutS: clamp(req.timeoutS ?? agent.timeoutS, 5, 1800),
     skip: req.modo === 'delegar' && req.skip === true,
+    garraia,
   }
   const tentativas: string[] = []
   // Transportes pulados só por falta de configuração (ex.: chave ausente).
