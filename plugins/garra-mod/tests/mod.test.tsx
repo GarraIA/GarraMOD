@@ -54,7 +54,7 @@ describe('carga e comandos', () => {
     ambiente(on)
     await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
     const out = await $.command.run({ command: 'garra-status', args: '' } as never)
-    expect(out.text).toContain('GarraIA Claude Code')
+    expect(out.text).toContain('Garra MOD para Claude Code')
     expect(out.text).toContain('Claude')
     expect(out.text).toContain('GarraIA')
     expect(out.text).toContain('Hermes')
@@ -364,7 +364,7 @@ describe('interface', () => {
     await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
     for (const surface of ['terminal', 'desktop'] as const) {
       const ui = await $.ui.mount({ plugin: 'garra-mod', surface, component: 'Placed', requestId: 'abertura-1', props: { id: 'abertura', plugin: 'garra-mod' } } as never)
-      expect(await ui.find({ type: 'Text', text: /GarraIA Claude Code/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /Garra MOD para Claude Code/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /Hermes/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /Extensões/ })).toBeDefined()
       await ui.unmount()

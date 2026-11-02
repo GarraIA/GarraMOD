@@ -54,7 +54,7 @@ export function formatStatus(d: {
   historico: number
 }): string {
   return [
-    `${MARCA} · Garra MOD v${d.version} · Claude Code ${d.claudeVersion}`,
+    `${MARCA} · v${d.version} · Claude Code ${d.claudeVersion}`,
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     TXT.modAtivo,
     formatAgents(d.agents, d.health, d.prefs),

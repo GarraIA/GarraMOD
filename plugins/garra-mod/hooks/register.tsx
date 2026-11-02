@@ -1,4 +1,4 @@
-// Garra MOD — GarraIA Claude Code.
+// Garra MOD para Claude Code (identidade GarraIA).
 // Este módulo só liga as peças: registro de agentes (src/registry), ponte
 // operacional (src/connectors), interface (src/interface), tema
 // (src/themes), personalidade e textos pt-BR (src/localization).
@@ -31,7 +31,7 @@ const T = {
 } as const
 
 const COMMANDS = [
-  { name: 'garra', description: '🇧🇷 Abre o painel principal do GarraIA Claude Code', argumentHint: '[agentes|conversas|modelos|mods|skills|tema|config|diagnostico]' },
+  { name: 'garra', description: '🇧🇷 Abre o painel principal do Garra MOD', argumentHint: '[agentes|conversas|modelos|mods|skills|tema|config|diagnostico]' },
   { name: 'garra-status', description: 'Estado geral do Garra MOD: agentes, MODs integrados e preferências' },
   { name: 'garra-consultar', description: 'Consulta um agente externo agora e mostra a resposta real', argumentHint: '<agente> <pergunta>' },
   { name: 'garra-tema', description: 'Identidade visual: aplica o tema Garra Brasil no Claude Skins', argumentHint: '[brasil|anterior|salvar|<skin>]' },

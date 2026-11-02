@@ -1,4 +1,4 @@
-// O cartão de abertura do GarraIA Claude Code: uma linha colocada no
+// O cartão de abertura do Garra MOD: uma linha colocada no
 // transcript no início da sessão, com os estados reais dos agentes e dos MODs.
 
 import type { RenderElement } from 'claude-code'

@@ -1,4 +1,6 @@
-# 🇧🇷 Garra MOD: GarraIA Claude Code
+# 🇧🇷 Garra MOD para Claude Code
+
+> Projeto independente da comunidade GarraIA, sem afiliação com a Anthropic nem endosso dela. Claude e Claude Code são marcas da Anthropic, PBC.
 
 O Garra MOD veste o Claude Code com a camisa do **GarraIA, Inteligência Artificial Brasileira** 🦜:
 

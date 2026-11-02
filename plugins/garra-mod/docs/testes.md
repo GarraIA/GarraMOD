@@ -29,7 +29,7 @@ Ambiente da validação: Linux, Claude Code **2.1.316**, GarraIA **0.4.10** (gat
 | Tema | `/garra-tema brasil` salvou e aplicou `garra-brasil` no Skins (anterior: gruvbox) e persistiu na sessão seguinte |
 | Abertura e painel num terminal real (pseudo-terminal 150×50) | cartão com estados reais; painel `/garra` acoplado; tecla 2 abre Agentes |
 | Next Steps | após um turno real: "🦜 GarraIA sugere:" com as sugestões e atalhos 1/2/3/0 do próprio Next Steps |
-| Personalidade | resposta real em pt-BR se apresentando como GarraIA Claude Code |
+| Personalidade | resposta real em pt-BR com a identidade do GarraIA |
 | Delegação sob `--permission-mode bypassPermissions`, sem pessoa (`-p`) | recusada: "NÃO executada: ninguém pôde aprovar"; o Hermes não foi chamado |
 | Delegação sob bypass, sessão interativa | 1) "Aprovar a delegação…?" 2) confirmação de riscos com *Executar com segurança / Executar em modo skip / Cancelar*; com segurança, o Hermes rodou sem `--yolo` e respondeu "OK" |
 | You Should Know | ativo: mostrou um aviso real acima do prompt durante o desenvolvimento |

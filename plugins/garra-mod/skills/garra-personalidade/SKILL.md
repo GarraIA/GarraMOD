@@ -1,6 +1,6 @@
 ---
 name: garra-personalidade
-description: Identidade, idioma e estilo do GarraIA Claude Code. Use quando a pessoa perguntar quem é o GarraIA, pedir para ajustar o tom, o idioma ou o "jeito brasileiro" das respostas, ou quando uma resposta precisar seguir a voz da marca GarraIA (textos, READMEs, mensagens ao usuário).
+description: Identidade, idioma e estilo do Garra MOD (a voz do GarraIA). Use quando a pessoa perguntar quem é o GarraIA, pedir para ajustar o tom, o idioma ou o "jeito brasileiro" das respostas, ou quando uma resposta precisar seguir a voz da marca GarraIA (textos, READMEs, mensagens ao usuário).
 ---
 
 # Personalidade GarraIA

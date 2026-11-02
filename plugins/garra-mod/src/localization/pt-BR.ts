@@ -3,7 +3,7 @@
 
 import type { GarraHealthStatus } from '../../types'
 
-export const MARCA = '🇧🇷 GarraIA Claude Code'
+export const MARCA = '🇧🇷 Garra MOD para Claude Code'
 export const SLOGAN = 'Seu ambiente brasileiro de programação'
 export const MASCOTE = '🦜'
 
