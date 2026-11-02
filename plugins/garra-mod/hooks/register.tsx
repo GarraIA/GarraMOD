@@ -19,7 +19,7 @@ import { defaultLayer, findAgent, mergeAgents, parseAgentFile, validateAgent } f
 import { oneLine, redactSecrets } from '../src/security/sanitize'
 import { cores, isLightTheme, saveGarraSkin, SKIN_NAME, skinsAvailable, skinsCall, skinsCurrent } from '../src/themes/garra-brasil'
 
-const VERSION = '0.1.1'
+const VERSION = '0.1.2'
 const PANE = 'garra'
 const PLACE = 'abertura'
 
@@ -185,7 +185,7 @@ async function probeAll($: EngineInterface) {
 
 // ---------------------------------------------------------------- chamadas
 
-async function runCall($: EngineInterface, agent: GarraAgentEntry, modo: Modo, mensagem: string, opts: { timeoutS?: number; dir?: string; skip?: boolean } = {}): Promise<CallOutcome> {
+async function runCall($: EngineInterface, agent: GarraAgentEntry, modo: Modo, mensagem: string, opts: { timeoutS?: number; dir?: string; skip?: boolean; decisao?: string } = {}): Promise<CallOutcome> {
   const prefs = await read($, prefsAtom)
   const timeoutS = opts.timeoutS ?? (modo === 'consulta' ? Math.min(agent.timeoutS, prefs.timeoutS) : agent.timeoutS)
   await update($, runningAtom, r => ({ ...r, [agent.id]: (r[agent.id] ?? 0) + 1 }))
@@ -205,6 +205,7 @@ async function runCall($: EngineInterface, agent: GarraAgentEntry, modo: Modo, m
       via: out.via,
       ...(out.modelo ? { modelo: out.modelo } : {}),
       redacoes: out.redacoes,
+      ...(opts.decisao ? { decisao: opts.decisao } : {}),
     }
     const history = await update($, historyAtom, list => [...list, entry].slice(-HISTORY_MAX))
     await $.store.set(STORE.history, history)
@@ -383,7 +384,8 @@ async function removeAgent($: EngineInterface, id: string): Promise<string> {
 // 2) confirmação de riscos, SEMPRE, mesmo depois de aprovada; é só nela que a
 //    pessoa pode escolher o modo skip (ex.: --yolo do Hermes). O modelo não pede skip.
 // Sem pessoa para responder (claude -p, pergunta dispensada), nada é executado.
-type Decision = { kind: 'executar'; skip: boolean } | { kind: 'parar'; text: string }
+// `decisao` registra como foi aprovada e o que a pessoa escolheu, para o resultado e o histórico.
+type Decision = { kind: 'executar'; skip: boolean; decisao: string } | { kind: 'parar'; text: string }
 
 async function confirmDelegation($: EngineInterface, agent: GarraAgentEntry, input: Record<string, unknown>, tarefa: string): Promise<Decision> {
   const key = delegationKey(input)
@@ -394,15 +396,16 @@ async function confirmDelegation($: EngineInterface, agent: GarraAgentEntry, inp
   if (!approvedByDialog) {
     const answer = await $.ui.ask(TXT.aprovarPergunta(agent.nome, oneLine(tarefa, 160)), { header: 'Garra MOD', options: [TXT.aprovar, TXT.recusar] }).catch(() => null)
     if (answer === null) return { kind: 'parar', text: TXT.semHumano(agent.nome) }
-    if (answer !== TXT.aprovar) return { kind: 'parar', text: TXT.recusada(agent.nome) }
+    if (answer !== TXT.aprovar) return { kind: 'parar', text: `${TXT.recusada(agent.nome)} (resposta: ${oneLine(answer, 60)})` }
   }
+  const aprovacao = approvedByDialog ? TXT.aprovacaoCaixa : TXT.aprovacaoPergunta
   const skipArgs = (agent.delegar ?? []).flatMap(t => (t.type === 'process' ? (t.skipArgs ?? []) : []))
   const options = skipArgs.length > 0 ? [TXT.executarSeguro, TXT.executarSkip, TXT.cancelar] : [TXT.executarSeguro, TXT.cancelar]
   const risk = await $.ui.ask(TXT.riscosPergunta(agent.nome, [...new Set(skipArgs)].join(' ')), { header: 'Riscos', options }).catch(() => null)
   if (risk === null) return { kind: 'parar', text: TXT.semHumano(agent.nome) }
-  if (risk === TXT.executarSeguro) return { kind: 'executar', skip: false }
-  if (risk === TXT.executarSkip && skipArgs.length > 0) return { kind: 'executar', skip: true }
-  return { kind: 'parar', text: TXT.canceladaRiscos(agent.nome) }
+  if (risk === TXT.executarSeguro) return { kind: 'executar', skip: false, decisao: TXT.decisao(aprovacao, risk) }
+  if (risk === TXT.executarSkip && skipArgs.length > 0) return { kind: 'executar', skip: true, decisao: TXT.decisao(aprovacao, risk) }
+  return { kind: 'parar', text: `${TXT.canceladaRiscos(agent.nome)} (${TXT.decisao(aprovacao, oneLine(risk, 60))})` }
 }
 
 // /garra-agentes: o nome também é o da skill garra-agentes, que o Claude Code
@@ -598,8 +601,8 @@ export const register: Register = (on, options) => {
     }
     const decision = await confirmDelegation($, agent, input, tarefa)
     if (decision.kind !== 'executar') return { result: decision.text }
-    const out = await runCall($, agent, 'delegar', frame(tarefa), { dir, skip: decision.skip })
-    return { result: formatOutcome(agent, 'delegar', out) }
+    const out = await runCall($, agent, 'delegar', frame(tarefa), { dir, skip: decision.skip, decisao: decision.decisao })
+    return { result: formatOutcome(agent, 'delegar', out, decision.decisao) }
   })
 
   // Registra quando a caixa de permissão da delegação é mostrada à pessoa.

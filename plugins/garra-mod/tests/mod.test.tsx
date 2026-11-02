@@ -212,6 +212,7 @@ describe('confirmação humana em duas etapas', () => {
     await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
     const res = await $.tool.call({ tool: 'mcp__garra-mod__garra_delegar', agente: 'hermes', tarefa: 'rode os testes' } as never)
     expect(String((res as { result?: unknown }).result)).toContain('Hermes concluiu a tarefa delegada')
+    expect(String((res as { result?: unknown }).result)).toContain('escolha: Executar com segurança')
     expect(asked.length).toBe(2)
     expect(asked[1]).toContain('FORA das permissões do Claude Code')
     expect(argvs.length).toBe(1)
@@ -239,6 +240,7 @@ describe('confirmação humana em duas etapas', () => {
     await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
     const res = await $.tool.call({ tool: 'mcp__garra-mod__garra_delegar', agente: 'hermes', tarefa: 'apague a pasta' } as never)
     expect(String((res as { result?: unknown }).result)).toContain('cancelada na confirmação de riscos')
+    expect(String((res as { result?: unknown }).result)).toContain('escolha: Cancelar')
     expect(argvs.length).toBe(0)
   })
 
@@ -253,6 +255,48 @@ describe('confirmação humana em duas etapas', () => {
     expect(String((res as { result?: unknown }).result)).toContain('recusada pela pessoa')
     expect(asked.length).toBe(1)
     expect(argvs.length).toBe(0)
+  })
+
+  test('o resultado e o histórico registram como foi aprovada e a opção escolhida', async ($, on) => {
+    const asked: string[] = []
+    ambiente(on)
+    pessoa(on, { aprovar: 'Aprovar', riscos: 'Executar em modo skip' }, asked)
+    hermesFalso(on, [])
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const res = await $.tool.call({ tool: 'mcp__garra-mod__garra_delegar', agente: 'hermes', tarefa: 'rode os testes' } as never)
+    const text = String((res as { result?: unknown }).result)
+    // Logo abaixo do título, antes da resposta do agente.
+    expect(text).toContain('concluiu a tarefa delegada (via CLI hermes (modo skip: --yolo)')
+    expect(text).toContain('[Garra MOD: aprovação: pergunta do Garra MOD · escolha: Executar em modo skip]')
+    expect(text.indexOf('escolha:')).toBeLessThan(text.indexOf('OK'))
+    // A mesma decisão aparece no painel, seção Conversas.
+    const ui = await $.ui.mount({
+      plugin: 'garra-mod',
+      surface: 'terminal',
+      component: 'Pane',
+      requestId: 'garra',
+      props: { title: 'Garra', isFocused: true, bodyColumns: 160, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
+    } as never)
+    await ui.press({ key: 'tab-conversas' })
+    expect(await ui.find({ type: 'Text', text: /escolha: Executar em modo skip/ })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('aprovada na caixa de permissão do Claude Code: só a pergunta de riscos aparece, e o resultado diz isso', async ($, on) => {
+    const asked: string[] = []
+    ambiente(on)
+    pessoa(on, { riscos: 'Executar com segurança' }, asked)
+    hermesFalso(on, [])
+    on('classic.PermissionRequest', () => ({}) as never)
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const input = { agente: 'hermes', tarefa: 'rode os testes' }
+    const classic = ($ as unknown as { classic: Record<string, (e: unknown) => Promise<unknown>> }).classic
+    await classic.PermissionRequest?.({ tool_name: 'mcp__garra-mod__garra_delegar', tool_input: input })
+    const res = await $.tool.call({ tool: 'mcp__garra-mod__garra_delegar', ...input } as never)
+    const text = String((res as { result?: unknown }).result)
+    expect(asked.length).toBe(1)
+    expect(asked[0]).toContain('FORA das permissões do Claude Code')
+    expect(text).toContain('[Garra MOD: aprovação: caixa de permissão do Claude Code · escolha: Executar com segurança]')
   })
 
   test('GarraIA não oferece modo skip (não existe para ele)', async ($, on) => {

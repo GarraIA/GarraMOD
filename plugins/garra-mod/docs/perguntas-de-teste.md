@@ -92,15 +92,15 @@ Os testes **G** e **H** usam só consulta (somente leitura). Os testes **M** sã
 
 ### M1 — Delegação com segurança
 - **Pedido:** "Delegue ao Hermes: crie o arquivo /tmp/garra-teste.txt com o texto ok."
-- **Esperado:** 1) pergunta *Aprovar a delegação…?* → **Aprovar**; 2) mensagem de riscos → **Executar com segurança**; o arquivo existe (`cat /tmp/garra-teste.txt`).
+- **Esperado:** 1) pergunta *Aprovar a delegação…?* → **Aprovar**; 2) mensagem de riscos → **Executar com segurança**; o resultado traz `[Garra MOD: aprovação: pergunta do Garra MOD · escolha: Executar com segurança]` (ou `caixa de permissão do Claude Code`, se ela apareceu); o arquivo existe (`cat /tmp/garra-teste.txt`).
 
 ### M2 — Modo skip só por escolha sua
 - **Pedido:** igual ao M1, escolhendo **Executar em modo skip** na mensagem de riscos.
-- **Esperado:** o resultado mostra `CLI hermes (modo skip: --yolo)`. Em nenhum outro caminho o `--yolo` aparece.
+- **Esperado:** o resultado mostra `CLI hermes (modo skip: --yolo)` e `escolha: Executar em modo skip`. Em nenhum outro caminho o `--yolo` aparece.
 
 ### M3 — Recusa
 - **Pedido:** igual ao M1, respondendo **Recusar** na primeira pergunta.
-- **Esperado:** "Delegação a Hermes recusada pela pessoa." e nenhum arquivo criado.
+- **Esperado:** "Delegação a Hermes recusada pela pessoa. (resposta: Recusar)" e nenhum arquivo criado.
 
 ### M4 — Sob `--permission-mode bypassPermissions`
 - **Pedido:** M1 numa sessão iniciada com `claude --permission-mode bypassPermissions`.
@@ -126,3 +126,16 @@ Chamadas reais pelo Garra MOD 0.1.0 instalado, no Claude Code 2.1.316. GarraIA v
 | A3 Um responde, o outro confere | ✅ | 3,2 s + 25,3 s | O GarraIA disse "15/05/2015, equipe do Rust da Mozilla". O Hermes **corrigiu** a autoria com fonte: o anúncio é assinado por "The Rust Core Team". |
 
 Observação: nesta rodada, cada resposta do Hermes trazia a nota "antes, sem sucesso: HTTP … chave não configurada". A partir da versão 0.1.1, tentativas que falham só por falta de configuração (chave ou variável não definida) não aparecem mais nas respostas; só erros reais (conexão recusada, chave recusada, comando de segredo que falhou). Se nenhum transporte funcionar, a falta de chave continua citada no erro final.
+
+## Resultados dos manuais — 2026-11-01
+
+Rodados com a pessoa respondendo às perguntas, numa sessão interativa do Claude Code em `bypassPermissions`. Agente: Hermes Agent 0.22.5 via CLI.
+
+**Manuais: 4 de 4 aprovados.**
+
+| Teste | Resultado | O que aconteceu |
+| --- | --- | --- |
+| M1 Com segurança | ✅ | Aprovar → Executar com segurança. Linha do resultado: `via CLI hermes` (sem `--yolo`), 11,7 s. `/tmp/garra-teste.txt` criado com `ok` + quebra de linha (3 bytes). |
+| M2 Modo skip | ✅ | Aprovar → Executar em modo skip, escolhido pela pessoa (duas vezes). Linha do resultado: `via CLI hermes (modo skip: --yolo)`. O `--yolo` só apareceu nessas execuções. |
+| M3 Recusa | ✅ | Recusar na primeira pergunta: "Delegação a Hermes recusada pela pessoa."; a pergunta de riscos não apareceu e `/tmp/garra-teste-m3.txt` não foi criado. |
+| M4 Sob bypass | ✅ | Interativo: as duas perguntas apareceram nos testes M1 a M3, mesmo com `bypassPermissions`. Sem pessoa (`claude -p --permission-mode bypassPermissions`): "NÃO executada: ninguém pôde aprovar", e `/tmp/garra-teste-m4.txt` não foi criado. |

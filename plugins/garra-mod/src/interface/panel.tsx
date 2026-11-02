@@ -148,7 +148,7 @@ export function panel(ui: UI, d: PanelData, act: PanelActions) {
                   <Text color={c.fraco}>{hhmm(e.em)} </Text>
                   <Text color={e.ok ? c.verde : c.erro}>{e.ok ? '✔' : '✘'} </Text>
                   <Text weight="bold" color={c.texto}>{e.nome}</Text>
-                  <Text color={c.fraco}> · {e.modo} · {seconds(e.ms)} · {e.via}{e.modelo ? ` · ${e.modelo}` : ''}{e.redacoes > 0 ? ` · ${e.redacoes} redação(ões)` : ''}</Text>
+                  <Text color={c.fraco}> · {e.modo} · {seconds(e.ms)} · {e.via}{e.modelo ? ` · ${e.modelo}` : ''}{e.redacoes > 0 ? ` · ${e.redacoes} redação(ões)` : ''}{e.decisao ? ` · ${e.decisao}` : ''}</Text>
                 </Text>
                 <Text color={c.texto}>  ❯ {line(e.pergunta, w - 6)}</Text>
                 <Text color={c.fraco}>  ↳ {line(e.resposta, w - 6)}</Text>

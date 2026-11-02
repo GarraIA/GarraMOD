@@ -100,6 +100,7 @@ Um agente delegado age **direto na máquina, fora das permissões do Claude Code
 1. **Aprovação humana antes de rodar.** Se a caixa de permissão do Claude Code aparecer, ela conta como aprovação. Se não aparecer (bypass, aprovação automática), o MOD pergunta: *"Aprovar a delegação desta tarefa ao Hermes…?"*.
 2. **Confirmação de riscos, sempre**, mesmo depois de aprovada: o que o agente pode fazer (shell, apagar arquivos, git, internet, ler segredos) e as opções **Executar com segurança**, **Executar em modo skip** (só para agentes que têm, como o `--yolo` do Hermes) e **Cancelar**.
 3. **O modo skip nunca é automático.** O modelo não consegue pedi-lo: só você escolhe, a cada delegação.
+4. **A decisão fica registrada.** O resultado de cada delegação traz, logo abaixo do título, como ela foi aprovada e a opção escolhida (ex.: `[Garra MOD: aprovação: pergunta do Garra MOD · escolha: Executar em modo skip]`); recusas e cancelamentos mostram a resposta dada. A mesma linha aparece em `/garra` → Conversas.
 
 Sem ninguém para responder (`claude -p`, pergunta dispensada ou resposta digitada que não seja uma das opções), **nada é executado**.
 

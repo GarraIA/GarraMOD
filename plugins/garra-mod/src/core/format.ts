@@ -5,7 +5,8 @@ import type { CallOutcome, Modo } from '../connectors'
 import { MARCA, TXT } from '../localization/pt-BR'
 import { extsActive, healthOf, seconds, statusIcon, statusText } from '../interface/common'
 
-export function formatOutcome(agent: GarraAgentEntry, modo: Modo, out: CallOutcome): string {
+// `decisao` (delegação): como foi aprovada e o que a pessoa escolheu, logo abaixo do título.
+export function formatOutcome(agent: GarraAgentEntry, modo: Modo, out: CallOutcome, decisao?: string): string {
   const icon = agent.icone ?? '🤖'
   const meta = [out.via !== '—' ? `via ${out.via}` : '', out.modelo ? `modelo ${out.modelo}` : '', seconds(out.ms)].filter(Boolean).join(' · ')
   const notes: string[] = []
@@ -13,11 +14,12 @@ export function formatOutcome(agent: GarraAgentEntry, modo: Modo, out: CallOutco
   if (out.extra) notes.push(out.extra)
   if (out.ok && out.tentativas.length > 0) notes.push(`antes, sem sucesso: ${out.tentativas.join(' | ')}`)
   const footer = notes.length > 0 ? `\n\n[Garra MOD: ${notes.join(' ')}]` : ''
+  const decided = decisao ? `\n[Garra MOD: ${decisao}]` : ''
   if (out.ok) {
     const what = modo === 'consulta' ? 'respondeu' : 'concluiu a tarefa delegada'
-    return `${icon} ${agent.nome} ${what} (${meta}):\n\n${out.texto}${footer}`
+    return `${icon} ${agent.nome} ${what} (${meta}):${decided}\n\n${out.texto}${footer}`
   }
-  return `❌ ${agent.nome} não respondeu (${meta}): ${out.texto}${footer}`
+  return `❌ ${agent.nome} não respondeu (${meta}): ${out.texto}${decided}${footer}`
 }
 
 export function formatAgents(agents: readonly GarraAgentEntry[], health: Record<string, GarraHealth>, prefs: GarraPrefs): string {

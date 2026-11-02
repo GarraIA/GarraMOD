@@ -110,6 +110,8 @@ export type GarraHistoryEntry = {
   via: string
   modelo?: string
   redacoes: number
+  // Delegação: como foi aprovada e o que a pessoa escolheu.
+  decisao?: string
 }
 
 export type GarraPrefs = {
