@@ -59,7 +59,7 @@ Usa `$.mcp.call` com a conexão e as credenciais do próprio Claude Code. Se o s
 
 A mensagem vai **sempre pela entrada padrão**, nunca pela linha de comando (sem risco de injeção no argv). `{timeout}` e `{cwd}` são substituídos. Interromper a chamada (Esc) ou estourar o prazo encerra o processo.
 
-`skipArgs` (opcional, só em `delegar`): opções do "modo skip" do agente, como `["--yolo"]` no Hermes. Elas **só** entram quando a pessoa escolhe *Executar em modo skip* na confirmação de riscos de uma delegação; o modelo não consegue pedi-las.
+`skipArgs` (opcional, só em `delegar`): opções do "modo skip" do agente, como `["--yolo"]` no Hermes. Elas entram quando a pessoa escolhe *Executar em modo skip* na confirmação de riscos de uma delegação, ou automaticamente com o Claude Code em modo bypass (`--dangerously-skip-permissions`); o modelo não consegue pedi-las.
 
 ### `openai-http` — endpoint `/v1/chat/completions`
 

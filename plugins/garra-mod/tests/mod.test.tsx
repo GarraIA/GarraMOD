@@ -325,6 +325,109 @@ describe('confirmação humana em duas etapas', () => {
   })
 })
 
+describe('modo bypass do Claude Code (--dangerously-skip-permissions)', () => {
+  // O modo chega pelos eventos clássicos (permission_mode), como o Claude Code os emite.
+  type Classic = Record<string, (e: unknown) => Promise<unknown>>
+  // O Claude Code por baixo de tudo: registrado antes da primeira chamada a `$`.
+  function classicos(on: On) {
+    on('classic.UserPromptSubmit' as never, (() => ({})) as never)
+    on('classic.PostToolUse' as never, (() => ({})) as never)
+  }
+  async function modo($: unknown, mode: string, evento = 'UserPromptSubmit') {
+    const classic = ($ as { classic: Classic }).classic
+    await classic[evento]?.({ prompt: 'x', tool_name: 'Bash', tool_input: {}, permission_mode: mode })
+  }
+  function perguntas(on: On, asked: string[], resposta: (q: string) => string | null) {
+    on('tool.call', { tool: 'AskUserQuestion' }, (_, e) => {
+      const q = (e as unknown as { questions: Array<{ question: string }> }).questions[0]?.question ?? ''
+      asked.push(q)
+      const answer = resposta(q)
+      if (answer === null) return { deny: 'ninguém para responder' }
+      return { result: { questions: (e as unknown as { questions: unknown[] }).questions, answers: { [q]: answer } } } as never
+    })
+  }
+  function agenteFalso(on: On, argvs: string[][]) {
+    on('process.spawn', async function* (_, e) {
+      argvs.push([...e.argv])
+      yield { stream: 'stdout' as const, text: 'OK' }
+      return { value: { code: 0, signal: null } }
+    })
+  }
+
+  test('Hermes sob bypass: roda sem perguntas, com --yolo, e o resultado diz por quê', async ($, on) => {
+    const asked: string[] = []
+    const argvs: string[][] = []
+    ambiente(on)
+    classicos(on)
+    perguntas(on, asked, () => 'Cancelar')
+    agenteFalso(on, argvs)
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    await modo($, 'bypassPermissions')
+    const res = await $.tool.call({ tool: 'mcp__garra-mod__garra_delegar', agente: 'hermes', tarefa: 'rode os testes' } as never)
+    const text = String((res as { result?: unknown }).result)
+    expect(asked.length).toBe(0)
+    expect(argvs.length).toBe(1)
+    expect(argvs[0]).toContain('--yolo')
+    expect(text).toContain('modo skip: --yolo')
+    expect(text).toContain('[Garra MOD: aprovação: modo bypass do Claude Code (sem perguntas) · escolha: Executar em modo skip]')
+  })
+
+  test('sob bypass, o tool.check não força a pergunta: vale a decisão do Claude Code', async ($, on) => {
+    ambiente(on)
+    classicos(on)
+    on('tool.check', () => ({ decision: 'allow' as const }))
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    await modo($, 'bypassPermissions')
+    const verdict = await $.tool.check({ tool: 'mcp__garra-mod__garra_delegar', input: { agente: 'hermes', tarefa: 'rode os testes' } })
+    expect(verdict.decision).toBe('allow')
+  })
+
+  test('sob bypass e sem pessoa (claude -p): a delegação roda mesmo assim', async ($, on) => {
+    const asked: string[] = []
+    const argvs: string[][] = []
+    ambiente(on)
+    classicos(on)
+    perguntas(on, asked, () => null)
+    agenteFalso(on, argvs)
+    await $.session.start({ cwd: '/projeto', surface: null, isInteractive: false })
+    await modo($, 'bypassPermissions')
+    const res = await $.tool.call({ tool: 'mcp__garra-mod__garra_delegar', agente: 'hermes', tarefa: 'rode os testes' } as never)
+    const text = String((res as { result?: unknown }).result)
+    expect(text).not.toContain('NÃO executada')
+    expect(text).toContain('Hermes concluiu a tarefa delegada')
+    expect(argvs.length).toBe(1)
+  })
+
+  test('GarraIA sob bypass: roda sem perguntas e sem modo skip (ele não tem)', async ($, on) => {
+    const asked: string[] = []
+    ambiente(on)
+    classicos(on)
+    perguntas(on, asked, () => 'Cancelar')
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    await modo($, 'bypassPermissions')
+    const res = await $.tool.call({ tool: 'mcp__garra-mod__garra_delegar', agente: 'garraia', tarefa: 'x' } as never)
+    const text = String((res as { result?: unknown }).result)
+    expect(asked.length).toBe(0)
+    expect(text).toContain('[Garra MOD: aprovação: modo bypass do Claude Code (sem perguntas) · escolha: Executar com segurança]')
+  })
+
+  test('saiu do bypass (outro modo informado depois): volta a perguntar duas vezes, sem --yolo', async ($, on) => {
+    const asked: string[] = []
+    const argvs: string[][] = []
+    ambiente(on)
+    classicos(on)
+    perguntas(on, asked, q => (q.startsWith('Aprovar') ? 'Aprovar' : 'Executar com segurança'))
+    agenteFalso(on, argvs)
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    await modo($, 'bypassPermissions')
+    await modo($, 'default', 'PostToolUse')
+    const res = await $.tool.call({ tool: 'mcp__garra-mod__garra_delegar', agente: 'hermes', tarefa: 'rode os testes' } as never)
+    expect(String((res as { result?: unknown }).result)).toContain('escolha: Executar com segurança')
+    expect(asked.length).toBe(2)
+    expect(argvs[0]).not.toContain('--yolo')
+  })
+})
+
 describe('tentativas que aparecem na resposta', () => {
   function hermesCli(on: On, ok = true) {
     on('process.spawn', async function* () {

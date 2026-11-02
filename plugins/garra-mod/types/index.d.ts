@@ -36,8 +36,9 @@ export type GarraTransport =
       output?: GarraOutput
       // Comando curto para verificar se o executável existe (padrão: `--version`).
       healthArgv?: string[]
-      // Argumentos do "modo skip" (ex.: ["--yolo"]): só entram quando a PESSOA
-      // escolhe esse modo na confirmação de riscos de uma delegação. Nunca automático.
+      // Argumentos do "modo skip" (ex.: ["--yolo"]): entram quando a PESSOA
+      // escolhe esse modo na confirmação de riscos de uma delegação, ou com o
+      // Claude Code em modo bypass. Nunca a pedido do modelo.
       skipArgs?: string[]
     }
   | {
