@@ -19,7 +19,7 @@ import { defaultLayer, findAgent, mergeAgents, parseAgentFile, validateAgent } f
 import { oneLine, redactSecrets } from '../src/security/sanitize'
 import { cores, isLightTheme, saveGarraSkin, SKIN_NAME, skinsAvailable, skinsCall, skinsCurrent } from '../src/themes/garra-brasil'
 
-const VERSION = '0.1.0'
+const VERSION = '0.1.1'
 const PANE = 'garra'
 const PLACE = 'abertura'
 

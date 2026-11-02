@@ -80,6 +80,9 @@ A mensagem vai **sempre pela entrada padrão**, nunca pela linha de comando (sem
 
 ## Segredos (`auth`)
 
+Se a chave de um transporte não estiver configurada (`option` vazio ou variável não definida), ele é pulado em silêncio: a resposta não menciona essa tentativa. Erros reais (conexão recusada, chave recusada, comando de segredo que falhou) aparecem na nota "antes, sem sucesso". Se nenhum transporte funcionar, o erro final cita tudo, inclusive a chave ausente.
+
+
 Nunca escreva uma chave no JSON: o MOD recusa definições que parecem conter segredo.
 
 | `source` | De onde vem o token |

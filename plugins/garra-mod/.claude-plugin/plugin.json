@@ -1,6 +1,6 @@
 {
   "name": "garra-mod",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "GarraIA Claude Code: identidade brasileira (pt-BR), tema Garra Brasil, painel /garra e uma ponte multiagente real com GarraIA e Hermes.",
   "author": { "name": "GarraIA Contributors", "url": "https://github.com/michelbr84/GarraRUST" },
   "homepage": "https://github.com/michelbr84/GarraRUST",

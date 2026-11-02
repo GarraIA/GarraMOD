@@ -272,6 +272,48 @@ describe('confirmação humana em duas etapas', () => {
   })
 })
 
+describe('tentativas que aparecem na resposta', () => {
+  function hermesCli(on: On, ok = true) {
+    on('process.spawn', async function* () {
+      if (!ok) throw new Error('ENOENT: hermes')
+      yield { stream: 'stdout' as const, text: 'Resposta do Hermes' }
+      return { value: { code: 0, signal: null } }
+    })
+  }
+
+  test('chave ausente no HTTP do Hermes não aparece na resposta', async ($, on) => {
+    ambiente(on)
+    hermesCli(on)
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const res = await $.tool.call({ tool: 'mcp__garra-mod__garra_consultar', agente: 'hermes', pergunta: 'oi' } as never)
+    const text = String((res as { result?: unknown }).result)
+    expect(text).toContain('Resposta do Hermes')
+    expect(text).not.toContain('antes, sem sucesso')
+    expect(text).not.toContain('chave não configurada')
+  })
+
+  test('erro real no HTTP (conexão recusada com chave definida) continua aparecendo', { options: { hermesApiKey: 'chave-de-teste' } }, async ($, on) => {
+    ambiente(on)
+    hermesCli(on)
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const res = await $.tool.call({ tool: 'mcp__garra-mod__garra_consultar', agente: 'hermes', pergunta: 'oi' } as never)
+    const text = String((res as { result?: unknown }).result)
+    expect(text).toContain('Resposta do Hermes')
+    expect(text).toContain('antes, sem sucesso')
+    expect(text).toContain('sem conexão')
+  })
+
+  test('se nada funciona, o erro final ainda cita a chave ausente', async ($, on) => {
+    ambiente(on)
+    hermesCli(on, false)
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const res = await $.tool.call({ tool: 'mcp__garra-mod__garra_consultar', agente: 'hermes', pergunta: 'oi' } as never)
+    const text = String((res as { result?: unknown }).result)
+    expect(text).toContain('não respondeu')
+    expect(text).toContain('chave não configurada')
+  })
+})
+
 describe('interface', () => {
   test('cartão de abertura mostra a marca e os agentes em toda superfície', async ($, on) => {
     ambiente(on)

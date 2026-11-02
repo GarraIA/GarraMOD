@@ -56,6 +56,8 @@ export async function callAgent($: EngineInterface, options: PluginOptions, req:
     skip: req.modo === 'delegar' && req.skip === true,
   }
   const tentativas: string[] = []
+  // Transportes pulados só por falta de configuração (ex.: chave ausente).
+  const silenciosas: string[] = []
   for (const transport of chain) {
     const res = await runTransport($, ctx, transport, mensagem)
     if (res.kind === 'ok') {
@@ -69,10 +71,16 @@ export async function callAgent($: EngineInterface, options: PluginOptions, req:
         ...(res.extra ? { extra: res.extra } : {}),
       })
     }
+    if (res.kind === 'unavailable' && res.silencioso) {
+      silenciosas.push(`${res.via}: ${res.motivo}`)
+      continue
+    }
     tentativas.push(`${res.via}: ${res.motivo}`)
     if (res.kind === 'error') return done({ ok: false, texto: res.motivo, via: res.via, redacoes, tentativas })
   }
-  return fail(TXT.todosIndisponiveis(agent.nome, tentativas.join(' | ')), redacoes, tentativas)
+  // Nada funcionou: aí a falta de configuração também ajuda a entender o porquê.
+  const todas = [...tentativas, ...silenciosas]
+  return fail(TXT.todosIndisponiveis(agent.nome, todas.join(' | ')), redacoes, todas)
 }
 
 export async function probeAgent($: EngineInterface, options: PluginOptions, agent: GarraAgentEntry, toolNames: ReadonlySet<string>, cwd: string): Promise<GarraHealth> {

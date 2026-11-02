@@ -22,7 +22,9 @@ export type TransportCtx = {
 
 export type TransportResult =
   | { kind: 'ok'; text: string; via: string; modelo?: string; extra?: string }
-  | { kind: 'unavailable'; via: string; motivo: string }
+  // `silencioso`: só faltou configurar algo (ex.: a chave). Passa a vez sem
+  // aparecer na resposta; só entra no erro final se nada funcionar.
+  | { kind: 'unavailable'; via: string; motivo: string; silencioso?: true }
   | { kind: 'error'; via: string; motivo: string }
 
 const TIMEOUT = Symbol('timeout')
@@ -57,24 +59,24 @@ const errMsg = (error: unknown) => oneLine(error instanceof Error ? error.messag
 
 // ------------------------------------------------------------------ auth
 
-export async function resolveAuth($: EngineInterface, ctx: TransportCtx, auth: GarraAuth | undefined): Promise<{ token: string | null } | { falta: string }> {
+export async function resolveAuth($: EngineInterface, ctx: TransportCtx, auth: GarraAuth | undefined): Promise<{ token: string | null } | { falta: string; ausente: boolean }> {
   if (auth === undefined || auth.type === 'none') return { token: null }
   if (auth.source === 'option') {
     const value = ctx.options[auth.option]
     return typeof value === 'string' && value.trim() !== ''
       ? { token: value.trim() }
-      : { falta: `chave não configurada (defina "${auth.option}" em /config → garra-mod)` }
+      : { falta: `chave não configurada (defina "${auth.option}" em /config → garra-mod)`, ausente: true }
   }
   if (auth.source === 'env') {
     const value = auth.env === 'GARRAIA_GATEWAY_API_KEY' ? await $.env.get('GARRAIA_GATEWAY_API_KEY') : await $.env.get('API_SERVER_KEY')
-    return value && value.trim() !== '' ? { token: value.trim() } : { falta: `variável ${auth.env} não definida` }
+    return value && value.trim() !== '' ? { token: value.trim() } : { falta: `variável ${auth.env} não definida`, ausente: true }
   }
   try {
     const run = await $.process.run(auth.argv, { timeoutMs: 10_000 })
     const token = run.stdout.split('\n')[0]?.trim() ?? ''
-    return run.exitCode === 0 && token !== '' ? { token } : { falta: `o comando de segredo ${auth.argv[0]} não devolveu valor` }
+    return run.exitCode === 0 && token !== '' ? { token } : { falta: `o comando de segredo ${auth.argv[0]} não devolveu valor`, ausente: false }
   } catch (error) {
-    return { falta: `o comando de segredo ${auth.argv[0]} falhou: ${errMsg(error)}` }
+    return { falta: `o comando de segredo ${auth.argv[0]} falhou: ${errMsg(error)}`, ausente: false }
   }
 }
 
@@ -157,7 +159,7 @@ async function runHttp($: EngineInterface, ctx: TransportCtx, t: Extract<GarraTr
   const bad = checkDestination(t.baseUrl, t.allowRemote === true)
   if (bad) return { kind: 'error', via, motivo: bad }
   const auth = await resolveAuth($, ctx, t.auth)
-  if ('falta' in auth) return { kind: 'unavailable', via, motivo: auth.falta }
+  if ('falta' in auth) return { kind: 'unavailable', via, motivo: auth.falta, ...(auth.ausente ? { silencioso: true as const } : {}) }
   const messages = [...(t.systemPrompt ? [{ role: 'system', content: t.systemPrompt }] : []), { role: 'user', content: message }]
   const headers: Record<string, string> = { 'content-type': 'application/json' }
   if (auth.token) headers.authorization = `Bearer ${auth.token}`
