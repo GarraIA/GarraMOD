@@ -35,12 +35,10 @@ O Garra MOD veste o Claude Code com a camisa do **GarraIA, Inteligência Artific
 No prompt de uma sessão do Claude Code no terminal:
 
 ```text
-/plugin install garra-mod --marketplace michelbr84/garra-mod
+/plugin install garra-mod --marketplace GarraIA/GarraMOD
 ```
 
-Responda `y` para adicionar o marketplace e escolha o escopo **user** para ter o MOD em todos os projetos. Pelo shell: `claude plugin install garra-mod --marketplace michelbr84/garra-mod`. O MOD não exige o repositório GarraRUST aberto.
-
-O repositório é **privado**: instala quem tem acesso de leitura a ele no GitHub e uma credencial do git para github.com na máquina (chave SSH, ou `gh auth login` + `gh auth setup-git`).
+Responda `y` para adicionar o marketplace e escolha o escopo **user** para ter o MOD em todos os projetos. Pelo shell: `claude plugin install garra-mod --marketplace GarraIA/GarraMOD`. O MOD não exige o repositório GarraRUST aberto.
 
 A partir de um clone local: `claude plugin marketplace add <pasta do clone>` e `claude plugin install garra-mod@garraia-mods`.
 

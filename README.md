@@ -11,7 +11,7 @@ Marketplace `garraia-mods`, com o **Garra MOD**: o Claude Code com a identidade 
 No prompt de uma sessão do Claude Code no terminal:
 
 ```text
-/plugin install garra-mod --marketplace michelbr84/garra-mod
+/plugin install garra-mod --marketplace GarraIA/GarraMOD
 ```
 
 Responda `y` para adicionar o marketplace e escolha o escopo **user** (vale para todos os projetos). Depois digite `/garra`.
@@ -19,17 +19,13 @@ Responda `y` para adicionar o marketplace e escolha o escopo **user** (vale para
 Pelo shell:
 
 ```bash
-claude plugin install garra-mod --marketplace michelbr84/garra-mod
+claude plugin install garra-mod --marketplace GarraIA/GarraMOD
 ```
 
-No app desktop, onde `/plugin` não roda: clique em **+** ao lado da caixa do prompt → **Plugins** → **Add marketplace** com `michelbr84/garra-mod` → **Add plugin**.
-
-**Repositório privado:** a instalação só funciona para quem tem acesso de leitura ao repositório no GitHub e já tem uma credencial do git para github.com nesta máquina (chave SSH, ou `gh auth login` seguido de `gh auth setup-git`). A instalação nunca pede essa credencial.
+No app desktop, onde `/plugin` não roda: clique em **+** ao lado da caixa do prompt → **Plugins** → **Add marketplace** com `GarraIA/GarraMOD` → **Add plugin**.
 
 Para desenvolver a partir de um clone: `claude plugin marketplace add <pasta do clone>` e `claude plugin install garra-mod@garraia-mods`. O Claude Code lê o plugin direto da pasta (editou, rode `/reload-plugins`).
 
 Futuras extensões do GarraIA entram como novas pastas em `plugins/` e novas entradas em `.claude-plugin/marketplace.json`.
 
 Licença MIT. O logo em `plugins/garra-mod/assets/garraia-logo.png` vem do repositório [GarraRUST](https://github.com/michelbr84/GarraRUST) (MIT, GarraIA Contributors).
-# GarraMOD
-# GarraMOD
