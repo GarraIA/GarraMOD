@@ -7,6 +7,8 @@ import { findAgent, mergeAgents, parseAgentFile, validateAgent, defaultLayer } f
 import { checkDestination, cleanOutput, redactSecrets } from '../src/security/sanitize'
 import { FRASES_ESPERA, lembrarFrase, SEM_REPETIR, sortearFrase } from '../src/localization/frases'
 import { linhasModelo, modeloDoConfig, modeloPassado, pastasDoGarraIA, type LeituraGarraIA } from '../src/connectors/garraia-config'
+import { modeloDoHermes, pastasDoHermes, resumoHermes, usaHermes } from '../src/connectors/hermes-config'
+import { listaDeMapas } from '../src/core/yaml'
 
 // Valores FALSOS, montados por partes para nenhum scanner de segredos os
 // confundir com chaves reais. Têm o formato que o MOD precisa remover.
@@ -229,5 +231,71 @@ describe('resumo do modelo que o MOD passa', () => {
     expect(linhasModelo(misto, LIDO).map(l => l.rotulo)).toEqual(['consulta', 'delegação'])
     const hermes = findAgent(mergeAgents([defaultLayer()]), 'hermes')
     expect(hermes ? linhasModelo(hermes, LIDO) : null).toEqual([])
+  })
+})
+
+describe('modelo do Hermes (config.yaml)', () => {
+  // Parecido com o config.yaml real: outras seções também têm provider/model
+  // (auxiliary, providers) e não podem ser confundidas com o modelo principal.
+  const HERMES = [
+    'model:',
+    '  default: gpt-6.1-sol',
+    '  provider: openai-codex',
+    '  base_url: https://chatgpt.com/backend-api/codex',
+    'providers:',
+    '  ollama-launch:',
+    '    default_model: hf.co/unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL',
+    'fallback_providers:',
+    '  - provider: openrouter',
+    '    model: anthropic/claude-opus-5-5',
+    '    base_url: https://openrouter.ai/api/v1',
+    '  - provider: openrouter  # barato',
+    "    model: 'anthropic/claude-haiku-5.5'",
+    'toolsets:',
+    '  - web',
+    'auxiliary:',
+    '  compression:',
+    '    provider: openrouter',
+    '    model: z-ai/glm-5.3-flash',
+    `    api_key: ${FALSO.openrouter}`,
+  ].join('\n')
+
+  test('lê o modelo principal, o provedor e as reservas, e nada mais', () => {
+    expect(modeloDoHermes(HERMES)).toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6.1-sol',
+      reservas: [
+        { provider: 'openrouter', model: 'anthropic/claude-opus-5-5' },
+        { provider: 'openrouter', model: 'anthropic/claude-haiku-5.5' },
+      ],
+    })
+  })
+
+  test('formato antigo (model: nome), sem reservas e sem modelo', () => {
+    expect(modeloDoHermes('model: anthropic/claude-haiku-5.5\nprovider: openrouter\n')).toEqual({ provider: 'openrouter', model: 'anthropic/claude-haiku-5.5', reservas: [] })
+    expect(modeloDoHermes('toolsets:\n  - web\n')).toBeNull()
+    expect(modeloDoHermes('model:\n  provider: openai-codex\n')).toBeNull()
+  })
+
+  test('lista de mapas com itens na coluna 0 termina na próxima chave do topo', () => {
+    expect(listaDeMapas('fallback_providers:\n- provider: a\n  model: m1\n  extra:\n    model: nao\n- provider: b\n  model: m2\nagent:\n  model: nao\n', 'fallback_providers')).toEqual([
+      { provider: 'a', model: 'm1', extra: '' },
+      { provider: 'b', model: 'm2' },
+    ])
+  })
+
+  test('pastas do Hermes, quem roda a CLI dele e o texto mostrado', () => {
+    expect(pastasDoHermes({ HOME: '/home/a' })).toEqual(['/home/a/.hermes'])
+    expect(pastasDoHermes({ HOME: '/home/a', HERMES_HOME: '~/outra' })[0]).toBe('/home/a/outra')
+    expect(pastasDoHermes({ USERPROFILE: 'C:/Users/a', LOCALAPPDATA: 'C:/Users/a/AppData/Local' })).toContain('C:/Users/a/AppData/Local/hermes')
+    const agents = mergeAgents([defaultLayer()])
+    expect(agents.filter(usaHermes).map(a => a.id)).toEqual(['hermes'])
+    const modelo = modeloDoHermes(HERMES)
+    expect(resumoHermes({ modelo, caminho: '~/.hermes/config.yaml', motivo: '' })).toEqual({
+      valor: 'openai-codex · gpt-6.1-sol',
+      reservas: 'openrouter · anthropic/claude-opus-5-5 → openrouter · anthropic/claude-haiku-5.5',
+      fonte: 'lido de ~/.hermes/config.yaml; o Garra MOD não passa modelo ao Hermes',
+    })
+    expect(resumoHermes({ modelo: null, caminho: null, motivo: 'config.yaml do Hermes não encontrado' })).toBeNull()
   })
 })

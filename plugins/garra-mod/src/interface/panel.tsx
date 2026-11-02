@@ -2,7 +2,7 @@
 // Tudo o que aparece vem do estado real; as ações chamam os handlers do MOD.
 
 import type { GarraAgentEntry, GarraDiag, GarraHealth, GarraHistoryEntry, GarraPrefs, GarraTab, GarraTransport } from '../../types'
-import type { ModeloPassado } from '../connectors/garraia-config'
+import type { ResumoModelo } from '../connectors/modelos'
 import { MARCA, SLOGAN } from '../localization/pt-BR'
 import { oneLine } from '../security/sanitize'
 import type { Cores } from '../themes/garra-brasil'
@@ -39,8 +39,8 @@ export type PanelData = {
   tema: string
   idioma: string
   columns: number
-  // Seção Modelos: o que o MOD passa no `provider`/`model` das chamadas MCP, por agente.
-  modelos: Readonly<Record<string, ReadonlyArray<{ rotulo: string } & ModeloPassado>>>
+  // Seção Modelos: o que o MOD passa nas chamadas MCP e o que cada agente usa, por agente.
+  modelos: Readonly<Record<string, ResumoModelo>>
 }
 
 export type PanelActions = {
@@ -165,12 +165,14 @@ export function panel(ui: UI, d: PanelData, act: PanelActions) {
           <Box flexDirection="column">
             {d.agents.filter(a => a.tipo !== 'principal').map(agent => {
               const seen = [...d.history].reverse().find(e => e.agente === agent.id && e.modelo)
-              const passa = d.modelos[agent.id] ?? []
+              const passa = d.modelos[agent.id]?.passa ?? []
+              const usa = d.modelos[agent.id]?.configurado ?? null
+              const conhecido = passa.length > 0 || usa !== null
               return (
                 <Box flexDirection="column">
                   <Text>
                     {agent.icone ?? '•'} <Text weight="bold" color={c.texto}>{agent.nome}</Text>
-                    <Text color={c.fraco}>: {passa.length > 0 ? '' : `configurado ${agent.modelo ?? 'pelo próprio agente'}; `}último observado {seen?.modelo ?? '—'}</Text>
+                    <Text color={c.fraco}>: {conhecido ? '' : `configurado ${agent.modelo ?? 'pelo próprio agente'}; `}último observado {seen?.modelo ?? '—'}</Text>
                   </Text>
                   {passa.map(l => (
                     <Box flexDirection="column" marginLeft={3}>
@@ -178,6 +180,13 @@ export function panel(ui: UI, d: PanelData, act: PanelActions) {
                       <Text color={c.fraco}>{l.fonte}</Text>
                     </Box>
                   ))}
+                  {usa ? (
+                    <Box flexDirection="column" marginLeft={3}>
+                      <Text color={c.texto}>usa: {usa.valor}</Text>
+                      {usa.reservas ? <Text color={c.texto}>reservas: {usa.reservas}</Text> : null}
+                      <Text color={c.fraco}>{usa.fonte}</Text>
+                    </Box>
+                  ) : null}
                 </Box>
               )
             })}

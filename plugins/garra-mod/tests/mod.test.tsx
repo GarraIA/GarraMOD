@@ -28,6 +28,21 @@ const CONFIG_GARRAIA = [
   '  default_provider: openrouter',
 ].join('\n')
 const COM_CONFIG = { '/home/teste/.config/garraia/config.yml': CONFIG_GARRAIA }
+// O config.yaml do Hermes: o MOD não passa modelo a ele, só mostra o que ele usa.
+const CONFIG_HERMES = [
+  'model:',
+  '  default: gpt-6.1-sol',
+  '  provider: openai-codex',
+  'fallback_providers:',
+  '  - provider: openrouter',
+  '    model: anthropic/claude-haiku-5.5',
+  'auxiliary:',
+  '  compression:',
+  '    provider: openrouter',
+  '    model: z-ai/glm-5.3-flash',
+  `    api_key: ${CHAVE_FALSA}`,
+].join('\n')
+const COM_HERMES = { ...COM_CONFIG, '/home/teste/.hermes/config.yaml': CONFIG_HERMES }
 
 type World = {
   mcpUp?: boolean
@@ -104,6 +119,16 @@ describe('carga e comandos', () => {
     await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
     const out = await $.command.run({ command: 'garra-status', args: '' } as never)
     expect(out.text).toContain('Modelo que o MOD passa ao GarraIA (MCP, consulta e delegação): nenhum — config.yml do GarraIA não encontrado; vale o padrão do servidor MCP do GarraIA (hoje z-ai/glm-5.3-flash)')
+  })
+
+  test('/garra-status mostra o modelo configurado no Hermes, lido do config.yaml dele', async ($, on) => {
+    ambiente(on, { files: COM_HERMES })
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const out = await $.command.run({ command: 'garra-status', args: '' } as never)
+    expect(out.text).toContain('🪶 Modelo configurado no Hermes: openai-codex · gpt-6.1-sol (reservas: openrouter · anthropic/claude-haiku-5.5) — lido de ~/.hermes/config.yaml; o Garra MOD não passa modelo ao Hermes')
+    expect(out.text).toContain('Modelo que o MOD passa ao GarraIA')
+    expect(out.text).not.toContain('z-ai/glm-5.3-flash')
+    expect(out.text).not.toContain(CHAVE_FALSA)
   })
 
   test('a personalidade entra no prompt de sistema', async ($, on) => {
@@ -579,6 +604,18 @@ describe('interface', () => {
     expect(await ui.find({ type: 'Text', text: 'lido do config.yml do GarraIA (~/.config/garraia/config.yml)' })).toBeDefined()
     // O Hermes segue com o modelo decidido por ele.
     expect(await ui.find({ type: 'Text', text: /configurado pelo próprio agente/ })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('painel /garra → Modelos mostra o modelo e as reservas do Hermes', async ($, on) => {
+    ambiente(on, { files: COM_HERMES })
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'garra-mod', surface: 'terminal', component: 'Pane', requestId: 'garra', props: { title: 'Garra', isFocused: true, bodyColumns: 90, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } } as never)
+    await ui.press({ key: 'tab-modelos' })
+    expect(await ui.find({ type: 'Text', text: 'usa: openai-codex · gpt-6.1-sol' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'reservas: openrouter · anthropic/claude-haiku-5.5' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'lido de ~/.hermes/config.yaml; o Garra MOD não passa modelo ao Hermes' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'o MOD passa (consulta e delegação): openrouter · anthropic/claude-haiku-5.5' })).toBeDefined()
     await ui.unmount()
   })
 

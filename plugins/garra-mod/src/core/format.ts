@@ -2,7 +2,7 @@
 
 import type { GarraAgentEntry, GarraExt, GarraHealth, GarraPrefs } from '../../types'
 import type { CallOutcome, Modo } from '../connectors'
-import type { ModeloPassado } from '../connectors/garraia-config'
+import type { ResumoModelo } from '../connectors/modelos'
 import { MARCA, TXT } from '../localization/pt-BR'
 import { extsActive, healthOf, seconds, statusIcon, statusText } from '../interface/common'
 
@@ -45,10 +45,14 @@ export function formatExts(exts: readonly GarraExt[]): string {
   return `🧩 Extensões: ${TXT.extensoes(extsActive(exts), exts.length)}\n${lines.join('\n')}`
 }
 
-export function formatModelos(modelos: ReadonlyArray<{ agent: GarraAgentEntry; linhas: ReadonlyArray<{ rotulo: string } & ModeloPassado> }>): string[] {
-  return modelos.flatMap(({ agent, linhas }) =>
-    linhas.map(l => `${agent.icone ?? '🤖'} Modelo que o MOD passa ao ${agent.nome} (MCP, ${l.rotulo}): ${l.valor} — ${l.fonte}`),
-  )
+export function formatModelos(modelos: ReadonlyArray<{ agent: GarraAgentEntry; resumo: ResumoModelo }>): string[] {
+  return modelos.flatMap(({ agent, resumo }) => {
+    const icon = agent.icone ?? '🤖'
+    const passa = resumo.passa.map(l => `${icon} Modelo que o MOD passa ao ${agent.nome} (MCP, ${l.rotulo}): ${l.valor} — ${l.fonte}`)
+    const c = resumo.configurado
+    const configurado = c ? [`${icon} Modelo configurado no ${agent.nome}: ${c.valor}${c.reservas ? ` (reservas: ${c.reservas})` : ''} — ${c.fonte}`] : []
+    return [...passa, ...configurado]
+  })
 }
 
 export function formatStatus(d: {
@@ -59,8 +63,8 @@ export function formatStatus(d: {
   prefs: GarraPrefs
   exts: readonly GarraExt[]
   historico: number
-  // O que o MOD passa no `provider`/`model` das chamadas MCP de cada agente.
-  modelos?: ReadonlyArray<{ agent: GarraAgentEntry; linhas: ReadonlyArray<{ rotulo: string } & ModeloPassado> }>
+  // O que o MOD passa nas chamadas MCP (GarraIA) e o que cada agente usa (Hermes).
+  modelos?: ReadonlyArray<{ agent: GarraAgentEntry; resumo: ResumoModelo }>
 }): string {
   return [
     `${MARCA} · v${d.version} · Claude Code ${d.claudeVersion}`,

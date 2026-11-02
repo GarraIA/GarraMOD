@@ -6,68 +6,20 @@
 
 import type { EngineInterface } from 'claude-code'
 import type { GarraAgentEntry, GarraTransport } from '../../types'
+import { encurtar, filho, lerNos, MODELO, NOME, topo, valor } from '../core/yaml'
 
 export type ModeloGarraIA = { provider: string; model: string }
 
-// Formatos aceitos, para nada estranho ir parar num argumento.
-const NOME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
-const MODELO = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/
-const MAX_BYTES = 256 * 1024
-
-type No = { indent: number; key: string; value: string }
-
-// Linhas `chave: valor` de um YAML de blocos. Itens de lista e comentários
-// ficam de fora; quem chama olha só a indentação exata de cada nível.
-function lerNos(yaml: string): No[] {
-  const nos: No[] = []
-  for (const line of yaml.split(/\r?\n/)) {
-    const trimmed = line.trim()
-    if (trimmed === '' || trimmed.startsWith('#') || trimmed === '---' || trimmed === '...') continue
-    if (trimmed === '-' || trimmed.startsWith('- ')) continue
-    const m = /^( *)(["']?)([^"'#:\s][^"':]*?)\2\s*:(?:\s+(.*))?$/.exec(line)
-    if (!m) continue
-    nos.push({ indent: m[1]?.length ?? 0, key: m[3] ?? '', value: m[4] ?? '' })
-  }
-  return nos
-}
-
-// Valor escalar sem aspas nem comentário; `null`/`~` contam como ausente.
-function escalar(raw: string): string {
-  const v = raw.trim()
-  const q = /^(["'])(.*)\1(?:\s+#.*)?$/.exec(v)
-  if (q) return q[2] ?? ''
-  const plain = v.replace(/\s+#.*$/, '').trim()
-  return plain === 'null' || plain === 'Null' || plain === 'NULL' || plain === '~' ? '' : plain
-}
-
-// Índices dos filhos diretos de `pai` (a indentação do primeiro filho vale para todos).
-function filhos(nos: No[], pai: number): number[] {
-  const base = nos[pai]?.indent ?? 0
-  const out: number[] = []
-  let nivel = -1
-  for (let i = pai + 1; i < nos.length; i++) {
-    const n = nos[i]
-    if (!n || n.indent <= base) break
-    if (nivel === -1) nivel = n.indent
-    if (n.indent === nivel) out.push(i)
-  }
-  return out
-}
-
 export function modeloDoConfig(yaml: string): ModeloGarraIA | null {
-  const nos = lerNos(yaml.slice(0, MAX_BYTES))
-  const topo = (key: string) => nos.findIndex(n => n.indent === 0 && n.key === key)
-  const agent = topo('agent')
-  const llm = topo('llm')
+  const nos = lerNos(yaml)
+  const agent = topo(nos, 'agent')
+  const llm = topo(nos, 'llm')
   if (agent < 0 || llm < 0) return null
-  const filho = (pai: number, key: string) => filhos(nos, pai).find(i => nos[i]?.key === key) ?? -1
-  const dp = filho(agent, 'default_provider')
-  const provider = dp < 0 ? '' : escalar(nos[dp]?.value ?? '')
+  const provider = valor(nos, filho(nos, agent, 'default_provider'))
   if (!NOME.test(provider)) return null
-  const entrada = filho(llm, provider)
+  const entrada = filho(nos, llm, provider)
   if (entrada < 0) return null
-  const m = filho(entrada, 'model')
-  const model = m < 0 ? '' : escalar(nos[m]?.value ?? '')
+  const model = valor(nos, filho(nos, entrada, 'model'))
   if (!MODELO.test(model)) return null
   return { provider, model }
 }
@@ -95,8 +47,6 @@ export function pastasDoGarraIA(env: EnvGarraIA): string[] {
 // O que a leitura achou. `caminho` é o arquivo para mostrar (com ~ no lugar da
 // pasta pessoal); `motivo` explica por que não há modelo.
 export type LeituraGarraIA = { modelo: ModeloGarraIA | null; caminho: string | null; motivo: string }
-
-const encurtar = (arquivo: string, home: string) => (home !== '' && arquivo.startsWith(`${home}/`) ? `~${arquivo.slice(home.length)}` : arquivo)
 
 export async function lerConfigGarraIA($: EngineInterface): Promise<LeituraGarraIA> {
   try {

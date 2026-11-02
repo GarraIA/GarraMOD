@@ -7,7 +7,9 @@ import { atom, read, update } from 'claude-code'
 import type { Elements, EngineInterface, PluginOptions, Register, RenderElement, Timer } from 'claude-code'
 import type { GarraAgent, GarraAgentEntry, GarraDiag, GarraDiagItem, GarraExt, GarraHealth, GarraHistoryEntry, GarraMeta, GarraPrefs, GarraSkill, GarraTab } from '../types'
 import { callAgent, type CallOutcome, makeLimiter, type Modo, probeAgent } from '../src/connectors'
-import { lerConfigGarraIA, linhasModelo, type ModeloPassado } from '../src/connectors/garraia-config'
+import { lerConfigGarraIA } from '../src/connectors/garraia-config'
+import { lerConfigHermes, usaHermes } from '../src/connectors/hermes-config'
+import { resumoDosModelos, type ResumoModelo } from '../src/connectors/modelos'
 import { detectExts, detectSkills, toolNameSet } from '../src/core/detect'
 import { formatAgents, formatExts, formatOutcome, formatStatus } from '../src/core/format'
 import { DEFAULT_PREFS, HISTORY_ANSWER_MAX, HISTORY_MAX, parseHistory, parsePrefs, STORE } from '../src/core/state'
@@ -21,7 +23,7 @@ import { defaultLayer, findAgent, mergeAgents, parseAgentFile, validateAgent } f
 import { oneLine, redactSecrets } from '../src/security/sanitize'
 import { cores, isLightTheme, lerSkinGarra, mesmaLista, salvarFrasesNoSkin, saveGarraSkin, SKIN_NAME, SKIN_SPINNER, skinsAvailable, skinsCall, skinsCurrent } from '../src/themes/garra-brasil'
 
-const VERSION = '0.1.7'
+const VERSION = '0.1.8'
 const PANE = 'garra'
 const PLACE = 'abertura'
 
@@ -431,21 +433,20 @@ async function statusText_($: EngineInterface) {
     prefs,
     exts,
     historico: history.length,
-    modelos: agents.filter(a => (modelos[a.id] ?? []).length > 0).map(agent => ({ agent, linhas: modelos[agent.id] ?? [] })),
+    modelos: agents.flatMap(agent => {
+      const resumo = modelos[agent.id]
+      return resumo ? [{ agent, resumo }] : []
+    }),
   })
 }
 
-// Provedor e modelo que o MOD vai passar a cada agente chamado por MCP,
-// relidos do config.yml do GarraIA na hora (o mesmo que a chamada usa).
-async function modelosPorAgente($: EngineInterface, agents: readonly GarraAgentEntry[]): Promise<Record<string, Array<{ rotulo: string } & ModeloPassado>>> {
-  const leitura = await lerConfigGarraIA($)
-  const out: Record<string, Array<{ rotulo: string } & ModeloPassado>> = {}
-  for (const agent of agents) {
-    if (agent.tipo === 'principal') continue
-    const linhas = linhasModelo(agent, leitura)
-    if (linhas.length > 0) out[agent.id] = linhas
-  }
-  return out
+// Modelos por agente, relidos na hora: o que o MOD passa ao GarraIA (do
+// config.yml dele, o mesmo que a chamada usa) e o que o Hermes usa (do
+// config.yaml dele; o MOD não passa modelo ao Hermes).
+async function modelosPorAgente($: EngineInterface, agents: readonly GarraAgentEntry[]): Promise<Record<string, ResumoModelo>> {
+  const garraia = await lerConfigGarraIA($)
+  const hermes = agents.some(usaHermes) ? await lerConfigHermes($) : null
+  return resumoDosModelos(agents, garraia, hermes)
 }
 
 
