@@ -74,6 +74,11 @@ function ambiente(on: On, world: World = {}) {
   const files = world.files ?? {}
   on('fs.exists', (_, e) => ({ value: Object.keys(files).some(f => f === e.path || f.startsWith(`${e.path}/`)) }))
   on('fs.read', (_, e, next) => (e.path in files ? { value: files[e.path] ?? '' } : next(e)))
+  on('fs.stat', (_, e, next) => {
+    if (e.path in files) return { value: { kind: 'file' as const, size: (files[e.path] ?? '').length, mtimeMs: 0, isLink: false } }
+    if (Object.keys(files).some(f => f.startsWith(`${e.path}/`))) return { value: { kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false } }
+    return next(e)
+  })
   on('ui.place', () => ({ value: { isPlaced: true, requestId: 'abertura-1' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.status', () => ({ value: undefined }))
@@ -617,6 +622,44 @@ describe('interface', () => {
     expect(await ui.find({ type: 'Text', text: 'lido de ~/.hermes/config.yaml; o Garra MOD não passa modelo ao Hermes' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: 'o MOD passa (consulta e delegação): openrouter · anthropic/claude-haiku-5.5' })).toBeDefined()
     await ui.unmount()
+  })
+
+  test('Hermes pela CLI: o modelo que respondeu vem do agent.log pela sessão e aparece no painel', async ($, on) => {
+    const sessao = 'local-ef25614cd6a6c320fc29ec126e50'
+    const log = [
+      `2026-11-02 02:55:04,041 INFO [${sessao}] agent.turn_context: conversation turn: session=${sessao} model=gpt-6.1-sol provider=openai-codex platform=cli`,
+      '2026-11-02 02:55:05,000 INFO [local-outra0000000000] agent.conversation_loop: API call #1: model=z-ai/glm-5.3-flash provider=openrouter',
+      `2026-11-02 02:55:06,422 INFO [${sessao}] agent.conversation_loop: API call #1: model=gpt-6.1-sol provider=openai-codex in=7779 out=5`,
+    ].join('\n')
+    ambiente(on, { files: { '/home/teste/.hermes/logs/agent.log': log } })
+    on('process.spawn', async function* () {
+      yield { stream: 'stdout' as const, text: 'PRONTO\n' }
+      yield { stream: 'stderr' as const, text: `\nsession_id: ${sessao}\n` }
+      return { value: { code: 0, signal: null } }
+    })
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const res = await $.tool.call({ tool: 'mcp__garra-mod__garra_consultar', agente: 'hermes', pergunta: 'oi' } as never)
+    const text = String((res as { result?: unknown }).result)
+    expect(text).toContain('🪶 Hermes respondeu (via CLI hermes · modelo gpt-6.1-sol')
+    expect(text).not.toContain('session_id')
+    const ui = await $.ui.mount({ plugin: 'garra-mod', surface: 'terminal', component: 'Pane', requestId: 'garra', props: { title: 'Garra', isFocused: true, bodyColumns: 90, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } } as never)
+    await ui.press({ key: 'tab-modelos' })
+    expect(await ui.find({ type: 'Text', text: /último observado gpt-6\.1-sol/ })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('Hermes sem session_id ou sem a sessão no log: responde normal, sem inventar modelo', async ($, on) => {
+    ambiente(on, { files: { '/home/teste/.hermes/logs/agent.log': 'nada daquela sessão\n' } })
+    on('process.spawn', async function* () {
+      yield { stream: 'stdout' as const, text: 'PRONTO\n' }
+      yield { stream: 'stderr' as const, text: '\nsession_id: local-semlinhanolog00\n' }
+      return { value: { code: 0, signal: null } }
+    })
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const res = await $.tool.call({ tool: 'mcp__garra-mod__garra_consultar', agente: 'hermes', pergunta: 'oi' } as never)
+    const text = String((res as { result?: unknown }).result)
+    expect(text).toContain('PRONTO')
+    expect(text).not.toContain('modelo ')
   })
 
   test('Next Steps por dentro do Garra: "next:" em pt-BR e o resto intacto', {

@@ -7,7 +7,7 @@ import { findAgent, mergeAgents, parseAgentFile, validateAgent, defaultLayer } f
 import { checkDestination, cleanOutput, redactSecrets } from '../src/security/sanitize'
 import { FRASES_ESPERA, lembrarFrase, SEM_REPETIR, sortearFrase } from '../src/localization/frases'
 import { linhasModelo, modeloDoConfig, modeloPassado, pastasDoGarraIA, type LeituraGarraIA } from '../src/connectors/garraia-config'
-import { modeloDoHermes, pastasDoHermes, resumoHermes, usaHermes } from '../src/connectors/hermes-config'
+import { modeloDoHermes, modeloNoLog, pastasDoHermes, resumoHermes, sessaoDoHermes, usaHermes } from '../src/connectors/hermes-config'
 import { listaDeMapas } from '../src/core/yaml'
 
 // Valores FALSOS, montados por partes para nenhum scanner de segredos os
@@ -297,5 +297,32 @@ describe('modelo do Hermes (config.yaml)', () => {
       fonte: 'lido de ~/.hermes/config.yaml; o Garra MOD não passa modelo ao Hermes',
     })
     expect(resumoHermes({ modelo: null, caminho: null, motivo: 'config.yaml do Hermes não encontrado' })).toBeNull()
+  })
+})
+
+describe('modelo observado do Hermes (agent.log)', () => {
+  const A = 'local-aaaa1111bbbb2222'
+  const B = 'local-cccc3333dddd4444'
+  const LOG = [
+    `2026-11-02 02:55:04,041 INFO [${A}] agent.turn_context: conversation turn: session=${A} model=gpt-6.1-sol provider=openai-codex platform=cli history=0 msg='[Pedido do Claude Code via Garra MOD'`,
+    `2026-11-02 02:55:05,000 INFO [${B}] agent.conversation_loop: API call #1: model=z-ai/glm-5.3-flash provider=openrouter in=10 out=2`,
+    `2026-11-02 02:55:06,422 INFO [${A}] agent.conversation_loop: API call #1: model=gpt-6.1-sol provider=openai-codex in=7779 out=5`,
+    `2026-11-02 02:55:07,100 WARNING [${A}] agent.fallback: primary failed (rate limit); trying fallback`,
+    `2026-11-02 02:55:08,300 INFO [${A}] agent.conversation_loop: API call #2: model=anthropic/claude-haiku-5.5 provider=openrouter in=7790 out=6`,
+    `2026-11-02 02:55:08,310 INFO [${A}] agent.conversation_loop: Turn ended: reason=text_response(finish_reason=stop) model=anthropic/claude-haiku-5.5 api_calls=2/8`,
+  ].join('\n')
+
+  test('o session_id que o Hermes escreve no fim da resposta', () => {
+    expect(sessaoDoHermes(`\nsession_id: ${A}\n`)).toBe(A)
+    expect(sessaoDoHermes(`session_id: ${B}\nmais texto\nsession_id: ${A}`)).toBe(A)
+    expect(sessaoDoHermes('PRONTO')).toBeNull()
+  })
+
+  test('a última chamada da sessão vale, inclusive numa reserva; outras sessões não contam', () => {
+    expect(modeloNoLog(LOG, A)).toBe('anthropic/claude-haiku-5.5')
+    expect(modeloNoLog(LOG, B)).toBe('z-ai/glm-5.3-flash')
+    expect(modeloNoLog(LOG.split('\n')[0] ?? '', A)).toBe('gpt-6.1-sol')
+    expect(modeloNoLog(LOG, 'local-naoexiste000')).toBeNull()
+    expect(modeloNoLog(`x [${A}] y: API call #1: model=$(rm) provider=z`, A)).toBeNull()
   })
 })

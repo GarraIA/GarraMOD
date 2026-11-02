@@ -11,6 +11,7 @@ import type { GarraAuth, GarraTransport } from '../../types'
 import { TXT } from '../localization/pt-BR'
 import { checkDestination, cleanOutput, oneLine } from '../security/sanitize'
 import type { ModeloGarraIA } from './garraia-config'
+import { ehHermes, modeloObservadoHermes, sessaoDoHermes } from './hermes-config'
 import { mcpText, parseChatCompletion, parseEnvelope } from './parse'
 
 export type TransportCtx = {
@@ -170,7 +171,10 @@ async function runProcess($: EngineInterface, ctx: TransportCtx, t: Extract<Garr
   }
   const parsed = parseEnvelope(out, t.output ?? 'auto')
   if (!parsed.ok) return { kind: 'error', via, motivo: parsed.motivo }
-  return { kind: 'ok', via, text: parsed.text, ...(parsed.modelo ? { modelo: parsed.modelo } : {}), ...(parsed.extra ? { extra: parsed.extra } : {}) }
+  // A CLI do Hermes não diz o modelo na resposta: vem do agent.log, pela sessão.
+  const sessao = !parsed.modelo && ehHermes(exe) ? sessaoDoHermes(err) : null
+  const modelo = parsed.modelo ?? (sessao !== null ? ((await modeloObservadoHermes($, sessao)) ?? undefined) : undefined)
+  return { kind: 'ok', via, text: parsed.text, ...(modelo ? { modelo } : {}), ...(parsed.extra ? { extra: parsed.extra } : {}) }
 }
 
 // ------------------------------------------------------------------ openai-http
