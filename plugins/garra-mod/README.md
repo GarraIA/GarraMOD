@@ -46,6 +46,74 @@ A partir de um clone local: `claude plugin marketplace add <pasta do clone>` e `
 
 Para desenvolver sem instalar: `claude --plugin-dir /caminho/para/GarraMOD/plugins/garra-mod`.
 
+## Instalar do zero num computador novo
+
+Passo a passo para uma máquina sem nada instalado. Os passos 3, 4 e 5 são opcionais: sem eles o MOD funciona com a personalidade pt-BR, o painel e o tema, só não consulta o GarraIA nem o Hermes.
+
+**1. Claude Code** (2.1.316 ou mais novo; precisa de conta Pro, Max, Team, Enterprise ou Console):
+
+```bash
+# Linux, macOS, WSL
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://claude.ai/install.ps1 | iex
+```
+
+Abra um terminal novo, confira com `claude --version` e rode `claude` para fazer login.
+
+**2. Garra MOD**, no prompt do Claude Code:
+
+```text
+/plugin install garra-mod --marketplace GarraIA/GarraMOD
+```
+
+Responda `y` para adicionar o marketplace e escolha o escopo **user**.
+
+**3. GarraIA** (instalador oficial do GarraRUST) e a ligação dele com o Claude Code:
+
+```bash
+# Linux, macOS, WSL
+curl -fsSL https://garraia.org/install.sh | sh
+claude mcp add garraia -- garra mcp-server
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://garraia.org/install.ps1 | iex
+claude mcp add garraia -- garra mcp-server
+```
+
+Confira com `garra --version`.
+
+**4. Hermes Agent** (instalador oficial da Nous Research):
+
+```bash
+# Linux, macOS, WSL2
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+```
+
+```powershell
+# Windows (PowerShell)
+iex (irm https://hermes-agent.nousresearch.com/install.ps1)
+```
+
+Recarregue o shell (`source ~/.bashrc` ou `source ~/.zshrc`) e confira com `hermes --version`. Rodado num terminal, o instalador também abre a configuração do próprio Hermes (modelo e chaves).
+
+**5. MODs integrados**: os comandos `/plugin` da seção [Requisitos](#requisitos).
+
+**6. Conferir**: reinicie o Claude Code e rode:
+
+```text
+/garra-tema brasil
+/garra-diagnostico completo
+/garra
+```
+
+Chaves de API só são necessárias para os modos HTTP dos agentes e ficam em `/config` → garra-mod, nunca em arquivo.
+
 ## Habilitar, desabilitar e remover
 
 ```bash
