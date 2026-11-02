@@ -12,12 +12,17 @@ const ENABLED = {
   'cc-plugin-you-should-know@builtin': true,
 }
 
-type World = { mcpUp?: boolean; cli?: boolean; sent?: Array<{ server: string; tool: string; args: Record<string, unknown> }> }
+type World = {
+  mcpUp?: boolean
+  cli?: boolean
+  sent?: Array<{ server: string; tool: string; args: Record<string, unknown> }>
+  store?: Readonly<Record<string, unknown>>
+}
 
 function ambiente(on: On, world: World = {}) {
-  mock.store(on)
+  mock.store(on, world.store)
   mock.env(on, { HOME: '/home/teste' })
-  mock.clock(on, { now: 1_800_000_000_000 })
+  const clock = mock.clock(on, { now: 1_800_000_000_000 })
   const tools = [
     { name: 'mcp__skins__design', description: '', mcp: true },
     { name: 'mcp__plan-progress__plan_progress', description: '', mcp: true },
@@ -47,6 +52,7 @@ function ambiente(on: On, world: World = {}) {
     world.sent?.push({ server: e.server, tool: e.tool, args: e.args })
     return { value: { content: [{ type: 'text', text: JSON.stringify({ schema: 'garra.ask.v1', ok: true, answer: 'Olá, aqui é o GarraIA!', model: 'modelo-teste' }) }], isError: false } }
   })
+  return clock
 }
 
 describe('carga e comandos', () => {
@@ -392,27 +398,215 @@ describe('interface', () => {
     }
   })
 
-  test('rótulos do Next Steps em pt-BR, sem tocar nos botões', async ($, on) => {
+  test('Next Steps por dentro do Garra: "next:" em pt-BR e o resto intacto', {
+    plugins: [{
+      name: 'next-steps',
+      tier: 'append',
+      register(on) {
+        on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+          const { Box, Text } = $.ui.resolve(e)
+          return (
+            <Box flexDirection="column">
+              <Text dimColor>next:</Text>
+              <Text>outro texto</Text>
+            </Box>
+          )
+        })
+      },
+    }],
+  }, async ($, on) => {
     ambiente(on)
-    on('ui.render', ($, e) => {
-      const { Box, Text } = $.ui.resolve(e)
-      return (
-        <Box flexDirection="column">
-          <Text dimColor>next:</Text>
-          <Text>outro texto</Text>
-        </Box>
-      )
-    })
     await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
-    const ui = await $.ui.mount({
-      plugin: 'garra-mod',
-      surface: 'terminal',
-      component: 'AbovePrompt',
-      requestId: 'band',
-      props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 9 }, view: {} },
-    } as never)
-    expect(await ui.find({ type: 'Text', text: /GarraIA sugere/ })).toBeDefined()
+    const ui = await $.ui.mount({ plugin: 'next-steps', surface: 'terminal', ...FAIXA } as never)
+    expect(await ui.find({ type: 'Text', text: '🦜 GarraIA sugere:' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /outro texto/ })).toBeDefined()
     await ui.unmount()
   })
+
+  // A ordem real: o Next Steps vem antes do Garra em enabledPlugins e fica POR
+  // FORA dele na cadeia, então o hook ui.render do Garra nunca vê o "next:".
+  // O plugin falso desenha exatamente como o next-steps 1.0.0.
+  test('Next Steps por fora do Garra: "next:" vira "🦜 GarraIA sugere:" e os botões seguem iguais', {
+    plugins: [{
+      name: 'next-steps',
+      tier: 'prepend',
+      register(on) {
+        on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+          const below = await next(e)
+          const { Box, Text, Button } = $.ui.resolve(e)
+          return (
+            <Box flexDirection="column">
+              {below}
+              <Box marginTop={1} />
+              <Text dimColor>next:</Text>
+              <Box key="s0" marginLeft={2}>
+                <Button hotkey="1" plain label="Rodar a suíte de testes" onPress={() => undefined} />
+              </Box>
+              <Box marginLeft={2}>
+                <Button hotkey="0" plain label="dismiss" onPress={() => undefined} />
+              </Box>
+            </Box>
+          )
+        })
+      },
+    }],
+  }, async ($, on) => {
+    ambiente(on)
+    on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+      const { Box } = $.ui.resolve(e)
+      return <Box />
+    })
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    for (const surface of ['terminal', 'desktop'] as const) {
+      const ui = await $.ui.mount({ plugin: 'next-steps', surface, ...FAIXA } as never)
+      expect(await ui.find({ type: 'Text', text: '🦜 GarraIA sugere:' })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: 'next:' })).toBeUndefined()
+      expect(await ui.find({ key: 'Rodar a suíte de testes' })).toBeDefined()
+      expect(await ui.find({ key: 'dismiss' })).toBeDefined()
+      await ui.unmount()
+    }
+  })
+
+  test('Next Steps por fora do Garra: "next steps…" vira "pensando nos próximos passos"', {
+    plugins: [{
+      name: 'next-steps',
+      tier: 'prepend',
+      register(on) {
+        on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+          const below = await next(e)
+          const { Box, Text } = $.ui.resolve(e)
+          return (
+            <Box flexDirection="column">
+              {below}
+              <Box marginTop={1}>
+                <Text dimColor>next steps…</Text>
+              </Box>
+            </Box>
+          )
+        })
+      },
+    }],
+  }, async ($, on) => {
+    ambiente(on)
+    on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+      const { Box } = $.ui.resolve(e)
+      return <Box />
+    })
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'next-steps', surface: 'terminal', ...FAIXA } as never)
+    expect(await ui.find({ type: 'Text', text: /GarraIA pensando nos próximos passos/ })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('com /garra-config next-steps off guardado, o Next Steps fica como veio', {
+    plugins: [{
+      name: 'next-steps',
+      tier: 'prepend',
+      register(on) {
+        on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+          const below = await next(e)
+          const { Box, Text } = $.ui.resolve(e)
+          return (
+            <Box flexDirection="column">
+              {below}
+              <Text dimColor>next:</Text>
+            </Box>
+          )
+        })
+      },
+    }],
+  }, async ($, on) => {
+    ambiente(on, { store: { prefs: { localizarNextSteps: false } } })
+    on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+      const { Box } = $.ui.resolve(e)
+      return <Box />
+    })
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'next-steps', surface: 'terminal', ...FAIXA } as never)
+    expect(await ui.find({ type: 'Text', text: 'next:' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /GarraIA sugere/ })).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('outro plugin que escreve "next:" na faixa não é traduzido', {
+    plugins: [{
+      name: 'outro-plugin',
+      tier: 'prepend',
+      register(on) {
+        on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+          const below = await next(e)
+          const { Box, Text } = $.ui.resolve(e)
+          return (
+            <Box flexDirection="column">
+              {below}
+              <Text>next:</Text>
+            </Box>
+          )
+        })
+      },
+    }],
+  }, async ($, on) => {
+    ambiente(on)
+    on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+      const { Box } = $.ui.resolve(e)
+      return <Box />
+    })
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'outro-plugin', surface: 'terminal', ...FAIXA } as never)
+    expect(await ui.find({ type: 'Text', text: 'next:' })).toBeDefined()
+    await ui.unmount()
+  })
 })
+
+describe('tema garra-brasil', () => {
+  const LISTA_ANTIGA = ['Pensando', 'Codando', 'Caprichando', 'Investigando', 'Arquitetando', 'Destrinchando', 'Lapidando', 'Batucando', 'Afinando', 'Garimpando']
+
+  function skinsFalso(on: On, show: { current: string; spinner: string[] }, saves: Array<Record<string, unknown>>) {
+    on('tool.call', { tool: 'mcp__skins__design' }, (_, e) => {
+      const input = e as unknown as Record<string, unknown>
+      if (input.action === 'show') return { result: JSON.stringify({ ...show, made: ['garra-brasil'] }) } as never
+      saves.push(input)
+      return { result: 'salvo' } as never
+    })
+  }
+
+  test('salvo com a lista antiga do MOD, ganha as frases da CLI do GarraIA', async ($, on) => {
+    const saves: Array<Record<string, unknown>> = []
+    const clock = ambiente(on)
+    skinsFalso(on, { current: 'garra-brasil', spinner: LISTA_ANTIGA }, saves)
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    await clock.advance(200)
+    expect(saves.length).toBe(1)
+    const spinner = saves[0]?.spinner as string[]
+    expect(spinner).toContain('Afiando as garras')
+    expect(spinner).toContain('Caçando uma boa resposta')
+    expect(spinner).toContain('Farejando bugs')
+    expect(spinner.length).toBeLessThanOrEqual(12)
+    expect(spinner.every(w => w.length >= 1 && w.length <= 24)).toBe(true)
+    expect(saves[0]?.name).toBe('garra-brasil')
+  })
+
+  test('lista que a pessoa editou não é trocada', async ($, on) => {
+    const saves: Array<Record<string, unknown>> = []
+    const clock = ambiente(on)
+    skinsFalso(on, { current: 'garra-brasil', spinner: ['Matutando', 'Tramando'] }, saves)
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    await clock.advance(200)
+    expect(saves.length).toBe(0)
+  })
+
+  test('com outro skin em uso, o Garra não mexe em nada', async ($, on) => {
+    const saves: Array<Record<string, unknown>> = []
+    const clock = ambiente(on)
+    skinsFalso(on, { current: 'one-dark', spinner: LISTA_ANTIGA }, saves)
+    await $.session.start({ cwd: '/projeto', surface: 'terminal', isInteractive: true })
+    await clock.advance(200)
+    expect(saves.length).toBe(0)
+  })
+})
+
+const FAIXA = {
+  component: 'AbovePrompt',
+  requestId: 'band',
+  props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 9 }, view: {} },
+}

@@ -5,7 +5,7 @@
 O Garra MOD veste o Claude Code com a camisa do **GarraIA, Inteligência Artificial Brasileira** 🦜:
 
 - **pt-BR de verdade.** Uma seção curta de personalidade no prompt de sistema faz o Claude responder como um especialista brasileiro em tecnologia. Todos os textos do MOD estão em português.
-- **Tema Garra Brasil**: verde, amarelo, azul e branco, aplicado pelo **Claude Skins** (spinner e rodapé em português: "Caprichando…", "Feito").
+- **Tema Garra Brasil**: verde, amarelo, azul e branco, aplicado pelo **Claude Skins**, com as mesmas mensagens de espera da CLI do GarraIA no spinner ("Afiando as garras…", "Farejando bugs…") e rodapé em português ("Feito"). Quem já tinha o tema salvo com a lista antiga do MOD, sem mexer nela, recebe a nova sozinho.
 - **Abertura GarraIA**: cartão no início da sessão com o estado **real** de cada agente e MOD.
 - **Painel `/garra`** com 9 seções: informações, agentes, conversas, modelos, MODs, skills, tema, configurações e diagnóstico.
 - **Multiagente real**: o Claude consulta, compara e delega para o **GarraIA** (GarraRUST) e o **Hermes** (Nous Research) por conexões reais (MCP, CLI ou HTTP), não por simulação.
@@ -127,15 +127,14 @@ Sem ninguém para responder (`claude -p`, pergunta dispensada ou resposta digita
 | --- | --- |
 | **Claude Skins** | O tema `garra-brasil` é salvo e aplicado pela ferramenta oficial do Skins (`mcp__skins__design`). `/skin` continua trocando livremente; a variante clara é derivada pelo próprio Skins. |
 | **Plan Progress** | Não há segundo sistema de progresso: a personalidade e as skills pedem as barras do Plan Progress com títulos em pt-BR, e os subagentes de ponte aparecem nas faixas de agentes. Chamadas diretas por ferramenta não viram faixas falsas. |
-| **Next Steps** | O MOD só traduz os rótulos ("next:" → "🦜 GarraIA sugere:"); botões e atalhos 1/2/3/0 continuam sendo do Next Steps. Desligue com `/garra-config next-steps off`. |
+| **Next Steps** | O MOD só traduz os rótulos ("next:" → "🦜 GarraIA sugere:", "next steps…" → "🦜 GarraIA pensando nos próximos passos…"); botões e atalhos 1/2/3/0 continuam sendo do Next Steps, inclusive o "dismiss". Funciona em qualquer ordem dos plugins: o MOD entrega ao Next Steps, pelo `ui.resolve`, um `Text` que já escreve esses rótulos em português. Desligue com `/garra-config next-steps off` (vale depois de `/reload-plugins` ou numa sessão nova). |
 | **You Should Know** | Componente oficial da Anthropic, embutido. O Garra MOD só verifica se está habilitado; o subagente `garra-mod:revisor` é uma revisão independente e se apresenta como **não** sendo o You Should Know. |
 
-Regiões de interface usadas: um cartão no transcript (`Placed`), um painel (`Pane` "garra"), o fim da linha de dicas (`PromptHint.tail`) e só os textos do Next Steps na banda acima do prompt (`AbovePrompt`, por composição).
+Regiões de interface usadas: um cartão no transcript (`Placed`), um painel (`Pane` "garra"), o fim da linha de dicas (`PromptHint.tail`) e só os textos do Next Steps na banda acima do prompt (`AbovePrompt`, pelo `Text` que o `ui.resolve` entrega ao Next Steps).
 
 ## Limitações conhecidas
 
 - O texto nativo do Claude Code (menus, `/help`, rodapés do motor) segue no idioma do próprio Claude Code; use `/garra-config idioma` para a opção nativa.
-- A tradução do Next Steps depende de o Garra MOD estar acima do Next Steps na cadeia de hooks; se não estiver, o rótulo fica em inglês.
 - **ACP** não é suportado: a API de mods escreve a entrada padrão de uma só vez.
 - O logo oficial do GarraRUST (`assets/garraia-logo.png`) aparece na abertura em terminais com imagens (kitty, Ghostty, iTerm2 3.5+); nos demais aparece o símbolo 🦜.
 - Windows: o código trata `USERPROFILE` e não usa shell, mas não foi testado em Windows. O Hermes Agent é voltado a Linux/macOS/WSL.

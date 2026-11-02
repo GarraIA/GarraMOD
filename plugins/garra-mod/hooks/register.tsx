@@ -17,9 +17,9 @@ import { PERSONALIDADE, PERSONALIDADE_ID } from '../src/localization/personalida
 import { MARCA, STATUS_ICONE, TXT } from '../src/localization/pt-BR'
 import { defaultLayer, findAgent, mergeAgents, parseAgentFile, validateAgent } from '../src/registry/registry'
 import { oneLine, redactSecrets } from '../src/security/sanitize'
-import { cores, isLightTheme, saveGarraSkin, SKIN_NAME, skinsAvailable, skinsCall, skinsCurrent } from '../src/themes/garra-brasil'
+import { cores, garraSkinDesatualizado, isLightTheme, saveGarraSkin, SKIN_NAME, skinsAvailable, skinsCall, skinsCurrent } from '../src/themes/garra-brasil'
 
-const VERSION = '0.1.2'
+const VERSION = '0.1.3'
 const PANE = 'garra'
 const PLACE = 'abertura'
 
@@ -245,6 +245,18 @@ async function applyBrasil($: EngineInterface): Promise<string> {
     : `Não foi possível aplicar o tema: ${oneLine(saved.text, 200)}`
   await update($, temaAtom, () => msg)
   return msg
+}
+
+// Leva as frases atuais do spinner a quem salvou o garra-brasil com uma lista
+// antiga do MOD e não mexeu nela. Sem o Skins, ou com a lista editada, nada muda.
+async function atualizarSkinAntigo($: EngineInterface): Promise<void> {
+  try {
+    if (!(await skinsAvailable($)) || !(await garraSkinDesatualizado($))) return
+    const saved = await saveGarraSkin($, true)
+    $.ui.log(saved.ok ? 'tema garra-brasil atualizado com as frases do GarraIA' : `tema garra-brasil não atualizado: ${oneLine(saved.text, 200)}`, { to: 'debug' })
+  } catch (error) {
+    $.ui.log(`tema garra-brasil não atualizado: ${String(error)}`, { to: 'debug' })
+  }
 }
 
 async function restoreSkin($: EngineInterface): Promise<string> {
@@ -522,6 +534,7 @@ export const register: Register = (on, options) => {
     if (e.isInteractive && prefs.boasVindas) await $.ui.place({ id: PLACE }).catch(() => undefined)
     // A verificação real dos agentes corre num despacho próprio.
     $.clock.after(50, () => void probeAll($))
+    $.clock.after(80, () => void atualizarSkinAntigo($))
     return started
   })
 
@@ -737,7 +750,10 @@ export const register: Register = (on, options) => {
     if (boolKey) {
       if (!on_(value) && !off(value)) return { text: `Use: /garra-config ${key} on|off` }
       await savePrefs($, p => ({ ...p, [boolKey]: on_(value) }))
-      const note = boolKey === 'personalidade' ? ' (vale a partir da próxima conversa ou compactação)' : ''
+      const note =
+        boolKey === 'personalidade' ? ' (vale a partir da próxima conversa ou compactação)'
+          : boolKey === 'localizarNextSteps' ? ' (vale depois de /reload-plugins ou numa sessão nova)'
+            : ''
       return { text: `${key}: ${on_(value) ? 'ligado' : 'desligado'}${note}.` }
     }
     if (key === 'prazo' || key === 'paralelo') {
@@ -833,38 +849,35 @@ export const register: Register = (on, options) => {
   })
 
   // Next Steps: rótulos em pt-BR, sem tocar nos botões nem nos atalhos dele.
-  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const below = await next(e)
-    const prefs = await read($, prefsAtom)
-    if (!prefs.localizarNextSteps || below === undefined || below === null) return below
-    return relabelNextSteps(below)
+  // A faixa do Next Steps costuma ficar POR FORA do Garra na cadeia de hooks
+  // (no mesmo nível, a ordem segue a lista de plugins, que o MOD não controla),
+  // e aí um ui.render do Garra nunca vê o "next:". Por isso a troca é feita no
+  // ui.resolve: o Next Steps recebe um Text que já escreve os rótulos em
+  // português, em qualquer ordem. O ui.resolve roda quando os plugins carregam,
+  // então ligar ou desligar vale a partir do próximo carregamento.
+  on('ui.resolve', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const table = await next(e)
+    if (next.origin.plugin !== NEXT_STEPS_PLUGIN) return table
+    if (!parsePrefs(await $.store.get(STORE.prefs)).localizarNextSteps) return table
+    return { ...table, Text: relabelText(table.Text) }
   })
 }
+
+const NEXT_STEPS_PLUGIN = 'next-steps'
 
 const NEXT_STEPS_LABELS: Record<string, string> = {
   'next:': '🦜 GarraIA sugere:',
   'next steps…': '🦜 GarraIA pensando nos próximos passos…',
 }
 
-// Troca só textos exatos do Next Steps; qualquer outra coisa volta intacta.
-function relabelNextSteps<T>(node: T): T {
-  if (Array.isArray(node)) {
-    let changed = false
-    const out = node.map(child => {
-      const next = relabelNextSteps(child)
-      if (next !== child) changed = true
-      return next
-    })
-    return (changed ? out : node) as T
+// Embrulha o Text do Next Steps: troca só os textos exatos dele; as outras
+// props e qualquer outro texto passam intactos.
+function relabelText<T>(Text: T): T {
+  const base = Text as unknown as (props: { children?: unknown }) => unknown
+  const wrapped = (props: { children?: unknown }) => {
+    const only = Array.isArray(props.children) && props.children.length === 1 ? props.children[0] : props.children
+    const label = typeof only === 'string' ? NEXT_STEPS_LABELS[only] : undefined
+    return base(label === undefined ? props : { ...props, children: label })
   }
-  if (typeof node !== 'object' || node === null) return node
-  const el = node as { type?: unknown; children?: unknown }
-  if (!Array.isArray(el.children)) return node
-  if (el.type === 'Text' && el.children.length === 1 && typeof el.children[0] === 'string') {
-    const label = NEXT_STEPS_LABELS[el.children[0]]
-    return label === undefined ? node : ({ ...el, children: [label] } as T)
-  }
-  if (el.type !== 'Box') return node
-  const children = relabelNextSteps(el.children)
-  return children === el.children ? node : ({ ...el, children } as T)
+  return wrapped as unknown as T
 }

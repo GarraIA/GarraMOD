@@ -9,7 +9,7 @@
       "name": "garra-mod",
       "source": "./plugins/garra-mod",
       "description": "Garra MOD para Claude Code: identidade GarraIA em pt-BR, tema Garra Brasil, painel /garra e ponte multiagente real com GarraIA e Hermes.",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "license": "MIT",
       "keywords": ["garraia", "pt-BR", "multiagente", "hermes", "tema"]
     }

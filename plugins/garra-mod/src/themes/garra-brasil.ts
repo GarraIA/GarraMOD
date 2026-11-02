@@ -31,8 +31,32 @@ export const SKIN_PALETTE = {
   other: '#C9D3CC',
 } as const
 
-export const SKIN_SPINNER = ['Pensando', 'Codando', 'Caprichando', 'Investigando', 'Arquitetando', 'Destrinchando', 'Lapidando', 'Batucando', 'Afinando', 'Garimpando']
+// As mensagens de espera da CLI do GarraIA (GarraRUST, garraia-cli/src/ui/spinner.rs),
+// dentro dos limites do Skins: até 12 frases de até 24 caracteres. Ficam de fora
+// "Servindo café aos transistores…" (30 caracteres), "Quase lá…" (o Claude Code
+// sorteia a frase no início do turno) e duas repetidas sobre escrever a resposta.
+// As de personalidade seguem em minoria (3 de 12, como o GarraRUST exige: até ¼).
+export const SKIN_SPINNER = [
+  'Processando',
+  'Consultando o modelo',
+  'Afiando as garras',
+  'Analisando o pedido',
+  'Organizando os tokens',
+  'Reunindo o contexto',
+  'Caçando uma boa resposta',
+  'Preparando a resposta',
+  'Verificando os detalhes',
+  'Farejando bugs',
+  'Revisando a resposta',
+  'Trabalhando nisso',
+]
 export const SKIN_DONE = ['Feito', 'Pronto', 'Caprichado', 'Resolvido', 'Entregue', 'Finalizado']
+
+// Listas que versões anteriores do MOD salvaram no Skins. Um garra-brasil com uma
+// delas, intacta, é atualizado sozinho; uma lista que a pessoa mudou fica como está.
+export const SKIN_SPINNER_ANTIGOS: readonly (readonly string[])[] = [
+  ['Pensando', 'Codando', 'Caprichando', 'Investigando', 'Arquitetando', 'Destrinchando', 'Lapidando', 'Batucando', 'Afinando', 'Garimpando'],
+]
 
 // Cores das superfícies do próprio MOD (cartão de abertura e painel).
 export type Cores = { verde: string; amarelo: string; azul: string; texto: string; fraco: string; erro: string; borda: string }
@@ -86,6 +110,21 @@ export async function skinsCurrent($: EngineInterface): Promise<{ current: strin
     }
   } catch {
     return null
+  }
+}
+
+// O garra-brasil está em uso no Skins com uma lista de frases que o MOD já
+// trocou e que ninguém editou?
+export async function garraSkinDesatualizado($: EngineInterface): Promise<boolean> {
+  const show = await skinsCall($, { action: 'show' })
+  if (!show.ok) return false
+  try {
+    const data = JSON.parse(show.text) as { current?: unknown; spinner?: unknown }
+    if (data.current !== SKIN_NAME || !Array.isArray(data.spinner)) return false
+    const atual = data.spinner
+    return SKIN_SPINNER_ANTIGOS.some(antiga => antiga.length === atual.length && antiga.every((w, i) => w === atual[i]))
+  } catch {
+    return false
   }
 }
 
