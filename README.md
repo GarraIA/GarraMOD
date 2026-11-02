@@ -31,3 +31,4 @@ Para desenvolver a partir de um clone: `claude plugin marketplace add <pasta do 
 Futuras extensões do GarraIA entram como novas pastas em `plugins/` e novas entradas em `.claude-plugin/marketplace.json`.
 
 Licença MIT. O logo em `plugins/garra-mod/assets/garraia-logo.png` vem do repositório [GarraRUST](https://github.com/michelbr84/GarraRUST) (MIT, GarraIA Contributors).
+# GarraMOD
